@@ -45,8 +45,6 @@ Work in progress. Current state:
 - [ ] Phase 2 — grammar induction pipeline
 - [ ] Phase 3 — SuperCollider generation engine + MIDI output
 
-A working SuperCollider prototype exists (`supercollider/trad_four_prototype.scd`) demonstrating the core generation approach over Bye Bye Blackbird changes.
-
 ## Data
 
 - **Leadsheets** — Impro-Visor imaginary-book `.ls` files (2600+ jazz standards). Impro-Visor is available at [impro-visor.com](https://www.impro-visor.com).
