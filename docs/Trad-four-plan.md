@@ -25,22 +25,23 @@
            │  Improv Generation   │
            │  (SuperCollider)     │
            └──────────────────────┘
-                      │
+                      │ MIDI (via JACK)
                       ▼
-           ┌──────────────────────┐
-           │  OUTPUT              │
-           │  Pitched + timed     │
-           │  improv sequence     │
-           └──────────────────────┘
+           ┌──────────────────────────────────────┐
+           │  REAPER                              │
+           │  Track 1: generated improv (VSTi)   │
+           │  Track 2: rhythm section (audio/MIDI)│
+           └──────────────────────────────────────┘
 ```
 
-The pipeline has three clearly separated concerns:
+The pipeline has four clearly separated concerns:
 
 - **Phase 1 (Python):** interprets the lead sheet — chord symbols, melody, form, key/time/tempo — and exposes a queryable harmonic model.
 - **Phase 2 (Python):** induces a player style grammar from a corpus of transcribed solos.
-- **Phase 3 (SuperCollider):** executes the grammar in real time over the live chord stream to generate pitched, timed improv phrases.
+- **Phase 3 (SuperCollider):** executes the grammar in real time over the live chord stream to generate pitched, timed improv phrases, output as a MIDI stream.
+- **Sound production (Reaper):** receives the MIDI stream from SC via JACK and plays it through a sampled instrument VSTi. A synchronized rhythm section track runs alongside.
 
-Python and SuperCollider communicate via **OSC (Open Sound Control)**. Python broadcasts the chord timeline at startup and answers real-time note-function queries during playback. SuperCollider owns all rhythm, pitch selection, and audio synthesis.
+Python and SuperCollider communicate via **OSC (Open Sound Control)**. Python broadcasts the chord timeline at startup and answers real-time note-function queries during playback. SuperCollider owns rhythm, pitch selection, and MIDI output. Reaper owns all audio and sound production.
 
 ---
 
@@ -200,8 +201,10 @@ A small library of manually designed grammars for canonical styles (bebop, modal
 Given a live chord timeline (from Phase 1 via OSC) and a loaded player grammar (from Phase 2), generate in real time a musically coherent N-bar improv phrase as a sequence of `(pitch_midi, duration, velocity)` triples.
 
 ### Resources
-- **SuperCollider** — Patterns library (`Pbind`, `Pwrand`, `Pseq`, `Pdef`) for grammar execution and real-time generation. Prototype already implemented for Bye Bye Blackbird.
+- **SuperCollider** — Patterns library (`Pbind`, `Pwrand`, `Pseq`, `Pdef`) for grammar execution and real-time generation. MIDI output via `MIDIOut` to a JACK virtual port. Prototype already implemented for Bye Bye Blackbird.
 - **Python via OSC** — for note-function classification queries better handled by music21 than reimplemented in SC.
+- **JACK** — low-latency MIDI routing from SC to Reaper on Linux (Arch). Tool: `a2jmidid` to bridge ALSA MIDI and JACK MIDI if needed.
+- **Reaper** — receives MIDI stream on a dedicated track, plays through a sampled instrument VSTi (e.g. Kontakt, sforzando + a jazz piano soundfont). A separate synchronized track carries the rhythm section.
 
 ### Key deliverables
 
@@ -228,11 +231,12 @@ Manages higher-level structure across multiple bars:
 - Avoids uniform rhythmic density throughout
 - Respects the N-bar trading boundary
 
-**3d. Velocity and articulation model**
-Maps note function and metric position to velocity and `legato`:
-- Chord tones on strong beats: louder, more sustained
-- Approach tones: slightly softer, shorter
-- Rests: genuine silence (not just zero velocity)
+**3d. MIDI output and articulation model**
+Converts the generated (pitch, duration, velocity) sequence to MIDI events via SC's `MIDIOut` class, sent to a JACK virtual port that Reaper subscribes to:
+- Chord tones on strong beats: higher velocity (e.g. 90–110)
+- Approach tones: softer (e.g. 60–75)
+- Rests: explicit MIDI note-off, no filler
+- Note duration mapped to MIDI note-on/note-off timing with legato control
 
 **3e. Transport and form manager**
 Handles AABA or other form; tracks bar position; generates the next phrase slightly before the current one ends to avoid latency at phrase boundaries (cf. Impro-Visor's `lead` parameter).
@@ -247,7 +251,7 @@ Handles AABA or other form; tracks bar position; generates the next phrase sligh
 
 | Phase | What | Where | Key resource | Main risk |
 |---|---|---|---|---|
-| 1a–1b | Lead sheet parsing + harmonic annotation | Python | music21 + iRealPro | music21 learning curve |
+| 1a–1b | Lead sheet parsing + harmonic annotation | Python | music21 + Impro-Visor .ls | music21 learning curve |
 | 1c | Note function classifier | Python | music21 | edge cases in altered chords |
 | 1d | OSC broadcaster | Python | python-osc | latency / timing sync |
 | 2a–2b | Corpus ingestion + phrase segmentation | Python | Weimar Jazz DB | phrase boundary heuristics |
@@ -256,7 +260,9 @@ Handles AABA or other form; tracks bar position; generates the next phrase sligh
 | 2e | Hand-crafted grammar library | SC | Patterns | musical quality |
 | 3a | Grammar executor | SC | Patterns | CFG → Pattern mapping |
 | 3b | Pitch filler | SC + Python OSC | extended `~pickNote` | contour / musical coherence |
-| 3c–3e | Phrase shape, articulation, transport | SC | Patterns + TempoClock | real-time reliability |
+| 3c | Phrase shape controller | SC | Patterns + TempoClock | real-time reliability |
+| 3d | MIDI output + articulation | SC → JACK → Reaper | MIDIOut + VSTi | JACK routing / latency |
+| 3e | Transport and form manager | SC + Reaper | TempoClock + JACK transport | tempo sync |
 
 ---
 
@@ -282,7 +288,7 @@ A working SuperCollider prototype exists for **Bye Bye Blackbird** (F major, 32-
 - Hardcoded chord → scale dictionary (`~scaleLib`, `~chordMap`)
 - Hybrid pitch filler (`~pickNote`) with chord-tone / scale-tone weighting and contour memory
 - Swing 8th rhythm cells with probabilistic selection (`Pwrand`)
-- Simple additive sine SynthDef (`\jazzTone`)
+- Simple additive sine SynthDef (`\jazzTone`) — **to be replaced by MIDI output to Reaper**
 - Full 32-bar chord timeline (`~changes`)
 
 This prototype lives at `supercollider/trad_four_prototype.scd` and corresponds roughly to **Phase 3b + 2e (partial)**, without the Python layer or OSC bridge. It serves as the execution scaffold into which Phase 1 and Phase 2 outputs will be integrated.
@@ -296,30 +302,47 @@ trad-four/
 ├── README.md
 ├── python/
 │   ├── leadsheet/
-│   │   ├── parser.py          # Phase 1a — MusicXML / iRealPro ingestion
-│   │   ├── annotator.py       # Phase 1b — harmonic annotation
-│   │   ├── classifier.py      # Phase 1c — note function classifier
-│   │   └── osc_bridge.py      # Phase 1d — OSC broadcaster
+│   │   ├── parser.py              # Phase 1a — Impro-Visor .ls parser ✓
+│   │   ├── chord_preprocessor.py  # Phase 1b prep — music21 symbol normalizer ✓
+│   │   ├── annotator.py           # Phase 1b — harmonic annotation
+│   │   ├── classifier.py          # Phase 1c — note function classifier
+│   │   └── osc_bridge.py          # Phase 1d — OSC broadcaster
 │   ├── grammar/
-│   │   ├── ingestion.py       # Phase 2a — Weimar DB corpus reader
-│   │   ├── segmenter.py       # Phase 2b — phrase segmenter
-│   │   ├── inducer.py         # Phase 2c — grammar induction
-│   │   └── serializer.py      # Phase 2d — JSON / .scd export
+│   │   ├── ingestion.py           # Phase 2a — Weimar DB corpus reader
+│   │   ├── segmenter.py           # Phase 2b — phrase segmenter
+│   │   ├── inducer.py             # Phase 2c — grammar induction
+│   │   └── serializer.py          # Phase 2d — JSON / .scd export
+│   ├── tests/
+│   │   ├── test_parser.py         # corpus-wide parser tests ✓
+│   │   └── test_music21_chords.py # music21 symbol compatibility tests ✓
 │   └── requirements.txt
 ├── supercollider/
-│   ├── trad_four_prototype.scd  # current prototype (Bye Bye Blackbird test case)
-│   ├── grammar_executor.scd     # Phase 3a
-│   ├── pitch_filler.scd         # Phase 3b
-│   ├── phrase_shape.scd         # Phase 3c
-│   ├── articulation.scd         # Phase 3d
-│   ├── transport.scd            # Phase 3e
-│   └── grammars/                # Phase 2e — hand-crafted grammars
+│   ├── trad_four_prototype.scd    # current prototype (Bye Bye Blackbird test case)
+│   ├── grammar_executor.scd       # Phase 3a
+│   ├── pitch_filler.scd           # Phase 3b
+│   ├── phrase_shape.scd           # Phase 3c
+│   ├── midi_out.scd               # Phase 3d — MIDI output via JACK to Reaper
+│   ├── transport.scd              # Phase 3e
+│   └── grammars/                  # Phase 2e — hand-crafted grammars
 │       ├── bebop.scd
 │       ├── modal.scd
 │       └── post_bop.scd
 ├── data/
-│   ├── leadsheets/            # MusicXML / iRealPro files
-│   └── weimar/                # Weimar Jazz Database SQLite
+│   ├── leadsheets/                # Impro-Visor .ls files (from imaginary-book)
+│   ├── weimar/                    # Weimar Jazz Database SQLite
+│   └── chord_symbols.txt          # unique chord vocabulary extracted from corpus ✓
 └── docs/
-    └── plan.md                # this document
+    └── plan.md                    # this document
 ```
+
+### Audio signal chain (Linux/Arch)
+
+```
+SuperCollider
+  └─ MIDIOut → JACK virtual MIDI port
+                    └─ Reaper MIDI input track
+                              ├─ Track 1: improv melody → VSTi (sampled instrument)
+                              └─ Track 2: rhythm section (pre-recorded audio or MIDI)
+```
+
+**Required tools:** JACK2, `a2jmidid` (ALSA↔JACK MIDI bridge if needed), Reaper, a sampled jazz instrument VSTi (e.g. Kontakt + a jazz piano library, or sforzando + a free jazz soundfont).
