@@ -137,6 +137,9 @@ def normalize_chord(raw: str) -> tuple[str, Optional[str]]:
     if raw == 'NC':
         return 'NC', None
 
+    # Normalize backslash slash notation to forward slash
+    raw = raw.replace('\\', '/')
+
     # Split off slash bass note if present
     bass_note = None
     if '/' in raw:

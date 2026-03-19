@@ -36,7 +36,6 @@ A9#11
 A9#5
 A9sus4
 ABass
-A\F
 Aadd9
 Aaug
 Ab
@@ -69,8 +68,6 @@ Ab9#11
 Ab9b5
 Ab9sus
 Ab9sus4
-Ab\Bb
-Ab\D7
 Abadd9
 Abaug
 Abdim
@@ -162,7 +159,6 @@ B9b13
 B9b5
 B9sus4
 BBass
-B\F7
 Baug
 Bb
 Bb11
@@ -208,7 +204,6 @@ Bb9sus
 Bb9sus4
 BbBass
 BbM6
-Bb\A
 Bbadd9
 Bbaddb9
 Bbaug
@@ -418,7 +413,6 @@ D9b5
 D9sus
 D9sus4
 DBass
-D\F
 Dadd9
 Dadd9no3
 Daug
@@ -532,7 +526,6 @@ E9#5
 E9+
 E9sus4
 EM69#11
-E\FM7
 Eadd9
 Eadd9no3
 Eaug
@@ -690,7 +683,6 @@ F9sus4
 FM6
 FM69
 FMb5
-F\Eb
 Fadd9
 Faug
 Fb
@@ -771,8 +763,6 @@ G9+
 G9sus
 G9sus4
 GBass
-G\Bb7
-G\F
 Gadd9
 Gaug
 Gb
@@ -797,7 +787,6 @@ Gb9
 Gb9#11
 Gb9+
 Gb9b5
-Gb\A7
 Gbadd9
 Gbaug
 Gbdim
