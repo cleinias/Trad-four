@@ -1,6 +1,6 @@
 # Trad-Four
 
-A computational jazz improvisation system that generates melodic lines over a given harmonic structure, in the style of a target player, heavily borrowing from [impro-visor](https://www.impro-visor.com)'s approach to solos' construction.
+A computational jazz improvisation system that generates melodic lines over a given harmonic structure, in the style of a target player, heavily borrowing from Bob Keller's [impro-visor](https://www.impro-visor.com)'s approach to solos' construction.
 
 The name refers to the jazz practice of "trading fours" — alternating 4-bar phrases between two players.
 
