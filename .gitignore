@@ -1,0 +1,24 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# Data (potentially large)
+data/weimar/*.db
+data/weimar/*.sqlite
+
+# SuperCollider
+*.swp
+synthdefs/
+
+# Editor
+.vscode/
+.idea/
+*~
+
+# OS
+.DS_Store
