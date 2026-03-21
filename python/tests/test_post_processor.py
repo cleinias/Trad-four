@@ -172,6 +172,77 @@ class TestPostProcessorHandCrafted:
         # Spans may be slightly larger due to overlap bricks, but never smaller
         assert span_dur >= chord_dur
 
+    def test_nc_only_blocks(self, parser, lib):
+        """Blocks that are all NC → empty KeySpans."""
+        blocks = [CB('NC', 4), CB('NC', 4)]
+        assert find_keys(blocks, lib) == []
+
+    def test_nc_between_bricks(self, parser, lib):
+        """NC blocks between real bricks get absorbed into adjacent spans."""
+        blocks = _parse(parser, [CB('Dm7', 2), CB('G7', 2), CB('CM7', 4)])
+        # Insert an NC in the middle of the block list
+        blocks_with_nc = blocks[:1] + [CB('NC', 4)] + blocks[1:]
+        spans = find_keys(blocks_with_nc, lib)
+        # NC duration should be absorbed, not create a separate span
+        total_dur = sum(ks.duration for ks in spans)
+        assert total_dur >= Fraction(12)  # 8 from brick + 4 from NC
+
+    def test_trailing_nc(self, parser, lib):
+        """Trailing NC blocks get absorbed into the last span."""
+        blocks = _parse(parser, [CB('G7', 2), CB('C', 2)])
+        blocks.append(CB('NC', 8))
+        spans = find_keys(blocks, lib)
+        # All duration should be in one span
+        assert len(spans) == 1
+        assert spans[0].duration >= Fraction(12)
+
+    def test_leading_nc(self, parser, lib):
+        """Leading NC blocks get absorbed into the first span."""
+        blocks = _parse(parser, [CB('G7', 2), CB('C', 2)])
+        blocks_with_nc = [CB('NC', 4)] + blocks
+        spans = find_keys(blocks_with_nc, lib)
+        total_dur = sum(ks.duration for ks in spans)
+        assert total_dur >= Fraction(8)
+
+    def test_bare_chord_not_diatonic_creates_new_span(self, parser, lib):
+        """A bare chord not diatonic to current key starts a new KeySpan."""
+        # Build blocks manually: a C major brick followed by a bare Gb7
+        blocks = _parse(parser, [CB('G7', 2), CB('C', 2)])
+        blocks.append(CB('Gb7', 4))  # Gb7 is not diatonic to C major
+        spans = find_keys(blocks, lib)
+        assert len(spans) >= 2
+        # Last span should be rooted on Gb
+        assert spans[-1].key == 6  # Gb
+
+    def test_bare_chord_diatonic_extends_span(self, parser, lib):
+        """A bare chord diatonic to current key extends the current span.
+
+        find_keys scans right-to-left, so the brick at the end seeds
+        the span, and the preceding diatonic bare chord gets absorbed.
+        """
+        blocks = _parse(parser, [CB('G7', 2), CB('C', 2)])
+        # Prepend a bare Dm7 — diatonic to C major
+        blocks_with_bare = [CB('Dm7', 4)] + blocks
+        spans = find_keys(blocks_with_bare, lib)
+        # Should stay as one span since Dm7 is diatonic to C
+        assert len(spans) == 1
+        assert spans[0].key == 0  # C
+
+    def test_keyspan_repr(self, parser, lib):
+        blocks = _parse(parser, [CB('Dm7', 2), CB('G7', 2), CB('CM7', 4)])
+        spans = find_keys(blocks, lib)
+        r = repr(spans[0])
+        assert 'C Major' in r
+
+    def test_keyspan_key_name(self, parser, lib):
+        ks = KeySpan(key=5, mode='Major', duration=Fraction(8))
+        assert ks.key_name() == 'F'
+
+    def test_keyspan_augment(self, parser, lib):
+        ks = KeySpan(key=0, mode='Major', duration=Fraction(4))
+        ks.augment(Fraction(8))
+        assert ks.duration == Fraction(12)
+
 
 # ---------------------------------------------------------------------------
 # Lead sheet integration: Bye Bye Blackbird (F major, 32 bars)
