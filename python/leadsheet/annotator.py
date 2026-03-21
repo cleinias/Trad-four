@@ -500,6 +500,7 @@ def note_function(midi_pitch: int, event: ChordEvent) -> str:
         'C'  — chord tone
         'L'  — color/tension tone
         'S'  — scale tone
+        'A'  — approach tone (chromatic neighbor of a chord tone)
         'X'  — outside (chromatic)
         'NC' — no chord context
     """
@@ -514,6 +515,10 @@ def note_function(midi_pitch: int, event: ChordEvent) -> str:
         return 'L'
     if pc in event.scale_tones:
         return 'S'
+    # Approach tone: half-step above or below any chord tone
+    for ct in event.chord_tones:
+        if (pc - ct) % 12 == 1 or (ct - pc) % 12 == 1:
+            return 'A'
     return 'X'
 
 

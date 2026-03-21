@@ -36,6 +36,9 @@ class ChordEvent:
     symbol: str                 # normalized chord symbol, e.g. 'Gm7', 'F7b9'
     duration: Fraction          # duration in beats
     bass_note: Optional[str] = None   # slash chord bass, e.g. 'F#' in 'Gm7/F#'
+    tonal_key: Optional[int] = None        # pitch class 0-11 of tonal center
+    tonal_mode: Optional[str] = None       # 'Major', 'Minor', or 'Dominant'
+    tonal_scale: Optional[frozenset] = None # pitch classes in the tonal area scale
 
     def __repr__(self):
         base = f"{self.symbol}"
