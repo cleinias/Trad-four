@@ -163,9 +163,8 @@ Given any MIDI pitch and the current chord + tonal area, returns its functional 
 `C` (chord tone), `L` (color tone), `S` (scale tone), `A` (approach tone — chromatic neighbor of chord tone), `X` (outside), `NC` (no chord).
 Implemented in `annotator.py:note_function()`. Approach tones are detected as half-step above or below any chord tone.
 
-**1d. OSC broadcaster**
-- At startup: sends chord timeline + tonal area map to SuperCollider
-- During playback: answers real-time note-function queries from SC
+**1d. OSC broadcaster** ✓ DONE
+Sends the fully annotated chord timeline to SuperCollider via OSC at startup as a batch dump. Protocol: `/trad4/meta` (metadata), `/trad4/chord` (one per ChordEvent with all annotation fields), `/trad4/done` (completion signal). Pitch class sets sent as comma-separated strings for SC parsing. Full pipeline CLI: `python -m python.leadsheet.osc_bridge path/to/tune.ls`. Uses `python-osc` library. Real-time query server deferred to Phase 3.
 
 ### Open questions
 - Do we treat the melody as a constraint on the improv (motivic development), or purely as reference material?
@@ -297,7 +296,7 @@ Handles AABA or other form; tracks bar position; generates the next phrase sligh
 | 1b | Harmonic annotator | Python | music21 | ✓ Done |
 | 1b-roadmap | CYK brick parser + KeySpan aggregation | Python | My.dictionary | ✓ Done |
 | 1c | Note function classifier | Python | music21 | ✓ Done |
-| 1d | OSC broadcaster | Python | python-osc | TODO |
+| 1d | OSC broadcaster | Python | python-osc | ✓ Done |
 | 2a–2b | Corpus ingestion + segmentation | Python | Weimar Jazz DB | TODO |
 | 2c | Grammar induction | Python | nltk / numpy | TODO |
 | 2d | Grammar serializer → SC | Python | JSON / .scd | TODO |
@@ -342,13 +341,14 @@ Reimplements Impro-Visor's CYK-based harmonic analysis in Python. Full pipeline 
 
 ### What is next
 
-**Phase 1d — OSC broadcaster:** expose the chord timeline and note-function queries to SuperCollider via OSC.
+**Phase 1d — OSC broadcaster** (`python/leadsheet/osc_bridge.py`) ✓
+Sends the fully annotated chord timeline to SuperCollider via OSC. Batch dump at startup: `/trad4/meta`, `/trad4/chord` × N, `/trad4/done`. CLI entry point for the full parse→annotate→roadmap→broadcast pipeline. 18 unit tests (mocked client).
 
 **Phase 2 — Style grammar induction:** corpus ingestion from Weimar Jazz DB, phrase segmentation, grammar induction, serialization.
 
 ### What is not yet started
 
-Phases 1d, 2a–2e, 3a–3e.
+Phases 2a–2e, 3a–3e.
 
 ---
 
@@ -363,7 +363,7 @@ trad-four/
 │   │   ├── chord_preprocessor.py  # Phase 1b prep — music21 symbol normalizer ✓
 │   │   ├── annotator.py           # Phase 1b — harmonic annotation + 1c note_function() ✓
 │   │   ├── tonal_areas.py         # Phase 1b — KeySpan→ChordEvent tonal area mapping ✓
-│   │   └── osc_bridge.py          # Phase 1d — OSC broadcaster
+│   │   └── osc_bridge.py          # Phase 1d — OSC broadcaster ✓
 │   ├── roadmap/                   # Phase 1b-roadmap — CYK brick parser ✓
 │   │   ├── __init__.py
 │   │   ├── sexp_parser.py         # S-expression tokenizer/parser ✓
@@ -385,7 +385,8 @@ trad-four/
 │   │   ├── test_roadmap_units.py  # roadmap module unit tests (130 tests) ✓
 │   │   ├── test_post_processor.py # CYK + KeySpan integration tests (44 tests) ✓
 │   │   ├── test_tonal_integration.py # KeySpan→ChordEvent mapping tests ✓
-│   │   └── test_note_function.py  # C/L/S/A/X classification tests ✓
+│   │   ├── test_note_function.py  # C/L/S/A/X classification tests ✓
+│   │   └── test_osc_bridge.py     # OSC broadcaster tests (18 tests) ✓
 │   └── requirements.txt
 ├── supercollider/
 │   ├── trad_four_prototype.scd    # current prototype (Bye Bye Blackbird test case)
