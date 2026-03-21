@@ -132,9 +132,10 @@ if __name__ == '__main__':
     from python.roadmap.brick_library import BrickLibrary
     from python.roadmap.cyk_parser import CYKParser
     from python.roadmap.chord_block import pc_to_name
+    from python.config import DICT_PATH, SUB_PATH, LEADSHEETS_DIR
 
     path = sys.argv[1] if len(sys.argv) > 1 else \
-        '/usr/share/impro-visor/leadsheets/imaginary-book/ByeByeBlackbird.ls'
+        str(LEADSHEETS_DIR / 'ByeByeBlackbird.ls')
 
     print(f"Parsing: {path}\n")
     ls = parse(path)
@@ -144,8 +145,7 @@ if __name__ == '__main__':
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         lib = BrickLibrary()
-        lib.load('/usr/share/impro-visor/vocab/My.dictionary',
-                 '/usr/share/impro-visor/vocab/My.substitutions')
+        lib.load(str(DICT_PATH), str(SUB_PATH))
     cyk = CYKParser(lib)
 
     key_spans = run_roadmap(ls, lib, cyk)

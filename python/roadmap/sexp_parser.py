@@ -11,7 +11,7 @@ Handles the same input as Impro-Visor's polya.Tokenizer:
 Usage:
     from python.roadmap.sexp_parser import parse_file, parse_string
 
-    exprs = parse_file('/usr/share/impro-visor/vocab/My.dictionary')
+    exprs = parse_file('data/vocab/My.dictionary')
     for expr in exprs:
         print(expr)   # each is a list or atom
 
@@ -168,8 +168,8 @@ def to_str(expr: SExp, indent: int = 0) -> str:
 
 if __name__ == '__main__':
     import sys
-    path = sys.argv[1] if len(sys.argv) > 1 else \
-        '/usr/share/impro-visor/vocab/My.dictionary'
+    from python.config import DICT_PATH
+    path = sys.argv[1] if len(sys.argv) > 1 else str(DICT_PATH)
     exprs = parse_file(path)
     print(f"Parsed {len(exprs)} top-level expressions from {path}")
     print(f"\nFirst 3:")

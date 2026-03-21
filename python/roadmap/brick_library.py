@@ -15,7 +15,7 @@ Usage:
     from python.roadmap.brick_library import BrickLibrary
 
     lib = BrickLibrary()
-    lib.load('/usr/share/impro-visor/vocab/My.dictionary')
+    lib.load('data/vocab/My.dictionary')
     print(lib)
 
     # Get a brick transposed to a specific key
@@ -522,10 +522,10 @@ class BrickLibrary:
 # ---------------------------------------------------------------------------
 
 if __name__ == '__main__':
-    import os
+    from python.config import DICT_PATH as _DICT_PATH, SUB_PATH as _SUB_PATH
 
-    dict_path = '/usr/share/impro-visor/vocab/My.dictionary'
-    sub_path  = '/usr/share/impro-visor/vocab/My.substitutions'
+    dict_path = str(_DICT_PATH)
+    sub_path  = str(_SUB_PATH)
 
     print(f"Loading {dict_path}...")
     lib = BrickLibrary()

@@ -7,8 +7,9 @@ import warnings
 import os
 import pytest
 from python.leadsheet.parser import parse
+from python.config import LEADSHEETS_DIR
 
-LS_DIR = '/usr/share/impro-visor/leadsheets/imaginary-book'
+LS_DIR = str(LEADSHEETS_DIR)
 LS_FILES = [
     os.path.join(LS_DIR, f)
     for f in sorted(os.listdir(LS_DIR))

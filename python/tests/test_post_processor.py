@@ -12,28 +12,17 @@ import warnings
 import pytest
 from fractions import Fraction
 
+from python.config import LEADSHEETS_DIR
 from python.roadmap.chord_block import ChordBlock as CB
 from python.roadmap.brick import Brick
-from python.roadmap.brick_library import BrickLibrary
 from python.roadmap.cyk_parser import CYKParser
 from python.roadmap.post_processor import find_keys, KeySpan
 
 # ---------------------------------------------------------------------------
-# Fixtures — shared BrickLibrary + CYKParser (expensive to create)
+# Fixtures — CYKParser (BrickLibrary comes from conftest session fixture)
 # ---------------------------------------------------------------------------
 
-DICT_PATH = '/usr/share/impro-visor/vocab/My.dictionary'
-SUB_PATH  = '/usr/share/impro-visor/vocab/My.substitutions'
-LS_DIR    = '/usr/share/impro-visor/leadsheets/imaginary-book'
-
-
-@pytest.fixture(scope='module')
-def lib():
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        library = BrickLibrary()
-        library.load(DICT_PATH, SUB_PATH)
-    return library
+LS_DIR = str(LEADSHEETS_DIR)
 
 
 @pytest.fixture(scope='module')

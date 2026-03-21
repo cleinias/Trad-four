@@ -246,9 +246,10 @@ if __name__ == '__main__':
     import warnings
     from python.roadmap.cyk_parser import CYKParser
     from python.roadmap.chord_block import ChordBlock as CB
+    from python.config import DICT_PATH as _DICT_PATH, SUB_PATH as _SUB_PATH
 
-    dict_path = '/usr/share/impro-visor/vocab/My.dictionary'
-    sub_path  = '/usr/share/impro-visor/vocab/My.substitutions'
+    dict_path = str(_DICT_PATH)
+    sub_path  = str(_SUB_PATH)
 
     print("Loading BrickLibrary...")
     with warnings.catch_warnings():

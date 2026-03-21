@@ -558,9 +558,10 @@ def midi_note_pool(event: ChordEvent,
 if __name__ == '__main__':
     import sys
     from python.leadsheet.parser import parse
+    from python.config import LEADSHEETS_DIR
 
     path = sys.argv[1] if len(sys.argv) > 1 else \
-        '/usr/share/impro-visor/leadsheets/imaginary-book/ByeByeBlackbird.ls'
+        str(LEADSHEETS_DIR / 'ByeByeBlackbird.ls')
 
     print(f"Parsing: {path}")
     ls = parse(path)

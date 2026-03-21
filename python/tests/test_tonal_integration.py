@@ -175,23 +175,10 @@ class TestAssignTonalAreas:
 # Integration tests with real BrickLibrary (requires Impro-Visor data)
 # ---------------------------------------------------------------------------
 
-DICT_PATH = '/usr/share/impro-visor/vocab/My.dictionary'
-SUB_PATH  = '/usr/share/impro-visor/vocab/My.substitutions'
-LS_DIR    = '/usr/share/impro-visor/leadsheets/imaginary-book'
+from python.config import LEADSHEETS_DIR
+from python.tests.conftest import has_vocab
 
-_has_improvisor = os.path.exists(DICT_PATH)
-
-
-@pytest.fixture(scope='module')
-def lib():
-    if not _has_improvisor:
-        pytest.skip("Impro-Visor data not found")
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        from python.roadmap.brick_library import BrickLibrary
-        library = BrickLibrary()
-        library.load(DICT_PATH, SUB_PATH)
-    return library
+LS_DIR = str(LEADSHEETS_DIR)
 
 
 @pytest.fixture(scope='module')
@@ -200,7 +187,7 @@ def cyk(lib):
     return CYKParser(lib)
 
 
-@pytest.mark.skipif(not _has_improvisor, reason="Impro-Visor data not found")
+@pytest.mark.skipif(not has_vocab, reason="Vocab data not found")
 class TestRunRoadmap:
     def test_ii_v_i_c_major(self, lib, cyk):
         """ii-V-I in C → all chords get C major tonal area."""

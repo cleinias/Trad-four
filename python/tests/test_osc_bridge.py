@@ -254,9 +254,9 @@ class TestBroadcastLeadsheet:
 # Integration: prepare_and_broadcast (requires Impro-Visor data)
 # ---------------------------------------------------------------------------
 
-DICT_PATH = '/usr/share/impro-visor/vocab/My.dictionary'
-LS_DIR = '/usr/share/impro-visor/leadsheets/imaginary-book'
-_has_improvisor = os.path.exists(DICT_PATH)
+from python.config import DICT_PATH as _CFG_DICT_PATH, LEADSHEETS_DIR
+LS_DIR = str(LEADSHEETS_DIR)
+_has_improvisor = _CFG_DICT_PATH.exists()
 
 
 @pytest.mark.skipif(not _has_improvisor, reason="Impro-Visor data not found")

@@ -572,9 +572,10 @@ def create_rules(lib: 'BrickLibrary') -> tuple[
 
 if __name__ == '__main__':
     from python.roadmap.brick_library import BrickLibrary
+    from python.config import DICT_PATH as _DICT_PATH, SUB_PATH as _SUB_PATH
 
-    dict_path = '/usr/share/impro-visor/vocab/My.dictionary'
-    sub_path  = '/usr/share/impro-visor/vocab/My.substitutions'
+    dict_path = str(_DICT_PATH)
+    sub_path  = str(_SUB_PATH)
 
     import warnings
     with warnings.catch_warnings():

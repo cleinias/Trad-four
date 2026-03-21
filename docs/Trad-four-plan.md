@@ -94,8 +94,9 @@ Given a lead sheet as input, produce a structured runtime object that the improv
 ### Resources
 - **`music21`** (MIT, actively maintained) — MusicXML parsing, chord symbol interpretation, scale selection, note function classification, key/time signature metadata. Can dynamically answer "is MIDI note 62 a chord tone over Gm7?" for any chord.
 - **`pretty_midi`** — fallback for ingesting MIDI representations of lead sheets.
-- **Impro-Visor imaginary-book** — 2600+ jazz standards in `.ls` format, directly on disk at `/usr/share/impro-visor/leadsheets/imaginary-book/`. Primary lead sheet source.
-- **`My.dictionary` + `My.substitutions`** — Impro-Visor's brick grammar and chord equivalence rules, used by the roadmap module.
+- **Impro-Visor imaginary-book** — 2600+ jazz standards in `.ls` format, copied locally to `data/leadsheets/`. Primary lead sheet source.
+- **`My.dictionary` + `My.substitutions`** — Impro-Visor's brick grammar and chord equivalence rules, copied locally to `data/vocab/`. Used by the roadmap module.
+- **`python/config.py`** — centralized path constants (`DICT_PATH`, `SUB_PATH`, `LEADSHEETS_DIR`, etc.) so all code resolves data paths relative to project root.
 
 ### Key deliverables
 
@@ -358,6 +359,7 @@ Phases 2a–2e, 3a–3e.
 trad-four/
 ├── README.md
 ├── python/
+│   ├── config.py                  # centralized data path constants ✓
 │   ├── leadsheet/
 │   │   ├── parser.py              # Phase 1a — Impro-Visor .ls parser ✓
 │   │   ├── chord_preprocessor.py  # Phase 1b prep — music21 symbol normalizer ✓
@@ -380,6 +382,7 @@ trad-four/
 │   │   ├── inducer.py             # Phase 2c — grammar induction
 │   │   └── serializer.py          # Phase 2d — JSON / .scd export
 │   ├── tests/
+│   │   ├── conftest.py            # shared session-scoped fixtures (BrickLibrary) ✓
 │   │   ├── test_parser.py         # corpus-wide parser tests ✓
 │   │   ├── test_music21_chords.py # music21 symbol compatibility tests ✓
 │   │   ├── test_roadmap_units.py  # roadmap module unit tests (130 tests) ✓
@@ -400,7 +403,8 @@ trad-four/
 │       ├── modal.scd
 │       └── post_bop.scd
 ├── data/
-│   ├── leadsheets/                # Impro-Visor .ls files (from imaginary-book)
+│   ├── leadsheets/                # Impro-Visor .ls files (from imaginary-book) ✓
+│   ├── vocab/                     # My.dictionary + My.substitutions (local copies) ✓
 │   ├── weimar/                    # Weimar Jazz Database SQLite
 │   └── chord_symbols.txt          # unique chord vocabulary extracted from corpus ✓
 └── docs/

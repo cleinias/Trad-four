@@ -1,8 +1,9 @@
 import os
 import warnings
 from python.leadsheet.parser import parse
+from python.config import LEADSHEETS_DIR
 
-LS_DIR = '/usr/share/impro-visor/leadsheets/imaginary-book'
+LS_DIR = str(LEADSHEETS_DIR)
 
 all_symbols = set()
 for fname in os.listdir(LS_DIR):

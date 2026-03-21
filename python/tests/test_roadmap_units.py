@@ -11,6 +11,7 @@ import warnings
 import pytest
 from fractions import Fraction
 
+from python.config import DICT_PATH, SUB_PATH, LEADSHEETS_DIR
 from python.roadmap.chord_block import (
     ChordBlock as CB, parse_root, pc_to_name, transpose_symbol,
 )
@@ -374,7 +375,7 @@ class TestSexpParser:
 
     def test_parse_file_real(self):
         """Smoke test against the real dictionary file."""
-        exprs = parse_file('/usr/share/impro-visor/vocab/My.dictionary')
+        exprs = parse_file(str(DICT_PATH))
         assert len(exprs) > 100
         # Should contain defbrick and equiv entries
         tags = {head(e) for e in exprs if is_list(e)}
@@ -466,8 +467,8 @@ class TestChordDictionaries:
     @pytest.fixture(scope='class')
     def dicts(self):
         d = ChordDictionaries()
-        d.load_substitutions_file('/usr/share/impro-visor/vocab/My.substitutions')
-        d.load_dictionary_file('/usr/share/impro-visor/vocab/My.dictionary')
+        d.load_substitutions_file(str(SUB_PATH))
+        d.load_dictionary_file(str(DICT_PATH))
         return d
 
     def test_match_exact(self, dicts):
@@ -592,12 +593,7 @@ class TestCYKParserInternals:
     """Cover CYK parser paths not hit by the standard pipeline tests."""
 
     @pytest.fixture(scope='class')
-    def parser(self):
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore')
-            lib = BrickLibrary()
-            lib.load('/usr/share/impro-visor/vocab/My.dictionary',
-                     '/usr/share/impro-visor/vocab/My.substitutions')
+    def parser(self, lib):
         from python.roadmap.cyk_parser import CYKParser
         return CYKParser(lib)
 
@@ -630,10 +626,7 @@ class TestCYKParserInternals:
     def test_parse_leadsheet_integration(self, parser):
         """parse_leadsheet() accepts ChordEvent objects from the parser."""
         from python.leadsheet.parser import parse as parse_ls
-        import os
-        ls = parse_ls(os.path.join(
-            '/usr/share/impro-visor/leadsheets/imaginary-book',
-            'BlueBossa.ls'))
+        ls = parse_ls(str(LEADSHEETS_DIR / 'BlueBossa.ls'))
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             blocks = parser.parse_leadsheet(ls.chord_timeline)
@@ -647,16 +640,6 @@ class TestCYKParserInternals:
 
 class TestBrickLibrary:
     """Cover BrickLibrary retrieval and diatonic methods."""
-
-    @pytest.fixture(scope='class')
-    def lib(self):
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore')
-            library = BrickLibrary()
-            library.load(
-                '/usr/share/impro-visor/vocab/My.dictionary',
-                '/usr/share/impro-visor/vocab/My.substitutions')
-        return library
 
     def test_get_brick_not_found(self, lib):
         assert lib.get_brick('Nonexistent Brick Name', target_key=0) is None

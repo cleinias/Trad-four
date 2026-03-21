@@ -22,7 +22,7 @@ Usage:
     from python.roadmap.equivalence import EquivalenceDictionary
     from python.roadmap.sexp_parser import parse_file
 
-    exprs = parse_file('/usr/share/impro-visor/vocab/My.substitutions')
+    exprs = parse_file('data/vocab/My.substitutions')
     edict = EquivalenceDictionary()
     edict.load_from_sexp(exprs)
 
@@ -313,9 +313,10 @@ class ChordDictionaries:
 
 if __name__ == '__main__':
     import os
+    from python.config import DICT_PATH as _DICT_PATH, SUB_PATH as _SUB_PATH
 
-    sub_path  = '/usr/share/impro-visor/vocab/My.substitutions'
-    dict_path = '/usr/share/impro-visor/vocab/My.dictionary'
+    sub_path  = str(_SUB_PATH)
+    dict_path = str(_DICT_PATH)
 
     dicts = ChordDictionaries()
 

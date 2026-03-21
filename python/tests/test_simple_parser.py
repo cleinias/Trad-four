@@ -172,11 +172,11 @@ Dm7 | G7 | Cmaj7 |
 
 def test_parse_dispatches_ls():
     """parse() still works for .ls files."""
-    import os
-    ls_path = '/usr/share/impro-visor/leadsheets/imaginary-book/ByeByeBlackbird.ls'
-    if not os.path.exists(ls_path):
-        pytest.skip("Impro-Visor corpus not available")
-    ls = parse(ls_path)
+    from python.config import LEADSHEETS_DIR
+    ls_path = LEADSHEETS_DIR / 'ByeByeBlackbird.ls'
+    if not ls_path.exists():
+        pytest.skip("Lead sheet corpus not available")
+    ls = parse(str(ls_path))
     assert ls.title == 'Bye Bye Blackbird'
 
 
@@ -200,20 +200,16 @@ def test_file_not_found_simple():
 # End-to-end: .tls → CYK → KeySpans
 # ---------------------------------------------------------------------------
 
-DICT_PATH = '/usr/share/impro-visor/vocab/My.dictionary'
-SUB_PATH  = '/usr/share/impro-visor/vocab/My.substitutions'
-
-
 def test_end_to_end_pipeline(tmp_path):
     """Parse a .tls file through the full roadmap pipeline."""
-    import os
     import warnings
+    from python.config import DICT_PATH as _DICT_PATH, SUB_PATH as _SUB_PATH
     from python.roadmap.brick_library import BrickLibrary
     from python.roadmap.cyk_parser import CYKParser
     from python.roadmap.post_processor import find_keys
 
-    if not os.path.exists(DICT_PATH):
-        pytest.skip("Impro-Visor dictionary not available")
+    if not _DICT_PATH.exists():
+        pytest.skip("Vocab data not available")
 
     # Bye Bye Blackbird chord changes (first 16 bars, simplified)
     content = """\
@@ -238,7 +234,7 @@ Gm7 | C7 | F6 | / |
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         lib = BrickLibrary()
-        lib.load(DICT_PATH, SUB_PATH)
+        lib.load(str(_DICT_PATH), str(_SUB_PATH))
     parser = CYKParser(lib)
 
     with warnings.catch_warnings():

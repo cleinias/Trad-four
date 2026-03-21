@@ -154,12 +154,13 @@ def prepare_and_broadcast(path: str, host: str = '127.0.0.1',
     ls = parse(path)
     annotate(ls)
 
+    from python.config import DICT_PATH, SUB_PATH
+
     # Load brick library and run roadmap
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         lib = BrickLibrary()
-        lib.load('/usr/share/impro-visor/vocab/My.dictionary',
-                 '/usr/share/impro-visor/vocab/My.substitutions')
+        lib.load(str(DICT_PATH), str(SUB_PATH))
     cyk = CYKParser(lib)
     run_roadmap(ls, lib, cyk)
 
