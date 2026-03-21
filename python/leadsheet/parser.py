@@ -1,6 +1,10 @@
 """
 parser.py — Trad-Four Phase 1a
-Parses Impro-Visor .ls leadsheet files into a structured Python data model.
+Parses lead sheet files into a structured Python data model.
+
+Supported formats:
+  - Impro-Visor .ls files (S-expression format)
+  - Simple .tls files (Trad-four Lead Sheet, hand-writable key:value + chord grid)
 
 Produces a LeadSheet object containing:
   - metadata (title, composer, tempo, meter, raw key)
@@ -9,7 +13,8 @@ Produces a LeadSheet object containing:
 
 Usage:
     from parser import parse
-    ls = parse('path/to/tune.ls')
+    ls = parse('path/to/tune.ls')   # Impro-Visor format
+    ls = parse('path/to/tune.tls')  # simple format
 """
 
 import re
@@ -362,24 +367,117 @@ def _parse_chord_grid(chord_lines: list[str], ls: LeadSheet) -> None:
             bar_number += 1
 
 
-def parse(path: str | Path) -> LeadSheet:
+def parse_simple(path: str | Path) -> LeadSheet:
     """
-    Parse an Impro-Visor .ls file and return a LeadSheet object.
+    Parse a simple .tls (Trad-four Lead Sheet) file and return a LeadSheet.
+
+    Format:
+        - Header: ``key: value`` pairs (title, composer, tempo, meter), all optional
+        - Comments: lines starting with ``#``
+        - Blank line separates header from chord grid
+        - Chord grid: ``|``-delimited bars, ``/`` for continuation, ``NC`` for no-chord
+        - ``melody:`` on its own line stops chord parsing (everything after is ignored)
 
     Args:
-        path: path to the .ls file
+        path: path to the .tls file
 
     Returns:
         LeadSheet with metadata and chord_timeline populated.
 
     Raises:
         FileNotFoundError: if the file does not exist.
-        ValueError: if the file does not appear to be a valid .ls file.
     """
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(f"Leadsheet not found: {path}")
 
+    text = path.read_text(encoding='utf-8', errors='replace')
+    lines = text.splitlines()
+
+    ls = LeadSheet(source_file=str(path))
+
+    # --- Parse header and chord grid ---
+    header_done = False
+    chord_lines: list[str] = []
+
+    for line in lines:
+        stripped = line.strip()
+
+        # Skip comments
+        if stripped.startswith('#'):
+            continue
+
+        # melody: marker ends chord parsing
+        if stripped.lower() == 'melody:':
+            break
+
+        if not header_done:
+            # Blank line ends header
+            if not stripped:
+                header_done = True
+                continue
+
+            # Try key: value header
+            m = re.match(r'^(\w+)\s*:\s*(.+)$', stripped)
+            if m:
+                key, value = m.group(1).lower(), m.group(2).strip()
+                if key == 'title':
+                    ls.title = value
+                elif key == 'composer':
+                    ls.composer = value
+                elif key == 'tempo':
+                    ls.tempo = float(value)
+                elif key == 'meter':
+                    parts = value.split('/')
+                    if len(parts) == 2:
+                        ls.beats_per_bar = int(parts[0])
+                        ls.beat_unit = int(parts[1])
+                continue
+
+            # Line with | is a chord grid line — header was implicit
+            if '|' in stripped:
+                header_done = True
+                chord_lines.append(stripped)
+                continue
+        else:
+            if not stripped:
+                continue
+            if '|' in stripped:
+                chord_lines.append(stripped)
+
+    _parse_chord_grid(chord_lines, ls)
+    return ls
+
+
+def parse(path: str | Path) -> LeadSheet:
+    """
+    Parse a lead sheet file and return a LeadSheet object.
+
+    Dispatches by file extension:
+        - ``.tls`` → simple Trad-four format (:func:`parse_simple`)
+        - ``.ls`` (or other) → Impro-Visor S-expression format
+
+    Args:
+        path: path to the lead sheet file
+
+    Returns:
+        LeadSheet with metadata and chord_timeline populated.
+
+    Raises:
+        FileNotFoundError: if the file does not exist.
+    """
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(f"Leadsheet not found: {path}")
+
+    if path.suffix == '.tls':
+        return parse_simple(path)
+
+    return _parse_ls(path)
+
+
+def _parse_ls(path: Path) -> LeadSheet:
+    """Parse an Impro-Visor .ls file and return a LeadSheet object."""
     text = path.read_text(encoding='utf-8', errors='replace')
     lines = text.splitlines()
 
