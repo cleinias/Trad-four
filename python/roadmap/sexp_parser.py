@@ -39,7 +39,7 @@ _TOKEN_RE = re.compile(r"""
     //[^\n]*            |   # line comment
     \(                  |   # open paren
     \)                  |   # close paren
-    [^\s()/]+           |   # atom (anything else)
+    [^\s()]+            |   # atom (anything except whitespace and parens)
     \s+                     # whitespace (ignored)
 """, re.VERBOSE | re.DOTALL)
 
