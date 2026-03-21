@@ -389,7 +389,7 @@ trad-four/
 └── docs/
     ├── plan.md                    # this document
     ├── literature_review.md       # survey of algorithmic jazz improvisation research
-    └── related_projects.md        # survey of reusable software (dicy2, roadmap_parser, etc.)
+    └── related_projects.md        # survey of reusable softwar2e (dicy2, roadmap_parser, etc.)
 ```
 
 ### Audio signal chain (Linux/Arch)

@@ -160,11 +160,11 @@ class CYKParser:
                             ptype=rule.get_type(),
                             mode=rule.get_mode(),
                             variant=rule.get_variant(),
-                            key=(rule.get_key() + left_node.chord_diff) % 12,
+                            key=(rule.get_key() + mv.chordDiff) % 12,
                             left=left_node,
                             right=right_node,
                             cost=cost,
-                            chord_diff=left_node.chord_diff,
+                            chord_diff=mv.chordDiff,
                             is_sub=mv.familyMatch,
                         )
                         self._table[row][col].append(node)
@@ -193,7 +193,7 @@ class CYKParser:
                         ptype=rule.get_type(),
                         mode=rule.get_mode(),
                         variant=rule.get_variant(),
-                        key=rule.get_key(),
+                        key=(rule.get_key() + mv.chordDiff) % 12,
                         left=node,
                         cost=node.cost + cost,
                         chord_diff=mv.chordDiff,
@@ -250,6 +250,17 @@ class CYKParser:
                             node.ptype not in ('Invisible', '') and
                             node.less_than(min_vals[row][col])):
                         min_vals[row][col] = node
+
+        # Fallback: ensure every diagonal cell has a finite cost.
+        # Bare chords that don't match any unary production still need
+        # to participate in the DP as valid (but expensive) leaf solutions.
+        for i in range(n):
+            if min_vals[i][i].cost == INF_COST:
+                leaf = self._table[i][i][0]   # the original chord leaf
+                min_vals[i][i] = TreeNode(
+                    chord=leaf.chord,
+                    cost=_DEFAULT_COST,
+                )
 
         # Pass 2: dynamic programming for minimum-cost cover
         # min_vals[i][j] now gets updated to reflect the best
