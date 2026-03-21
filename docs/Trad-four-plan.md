@@ -89,45 +89,77 @@ A soloist's style in this model = **rhythmic patterns** + **note-type distributi
 ## Phase 1 — Lead Sheet Interpretation
 
 ### Goal
-Given a lead sheet as input, produce a structured runtime object that the improv engine can query: *"at beat 3 of bar 7, what chord is playing, what are its chord tones, what scale applies, and what is the melodic note?"*
+Given a lead sheet as input, produce a structured runtime object that the improv engine can query: *"at beat 3 of bar 7, what chord is playing, what are its chord tones, what scale applies, what tonal area are we in, and what is the melodic note?"*
 
 ### Resources
 - **`music21`** (MIT, actively maintained) — MusicXML parsing, chord symbol interpretation, scale selection, note function classification, key/time signature metadata. Can dynamically answer "is MIDI note 62 a chord tone over Gm7?" for any chord.
 - **`pretty_midi`** — fallback for ingesting MIDI representations of lead sheets.
-- **iRealPro** — MusicXML exports of chord changes for 3000+ jazz standards; directly readable by music21.
+- **Impro-Visor imaginary-book** — 2600+ jazz standards in `.ls` format, directly on disk at `/usr/share/impro-visor/leadsheets/imaginary-book/`. Primary lead sheet source.
+- **`My.dictionary` + `My.substitutions`** — Impro-Visor's brick grammar and chord equivalence rules, used by the roadmap module.
 
 ### Key deliverables
 
-**1a. Lead sheet parser**
-Reads a MusicXML or iRealPro file and produces a Python data structure:
-- Time signature, key signature, tempo
-- Chord timeline: list of `(bar, beat, chord_symbol, duration_in_beats)`
-- Melody timeline: list of `(bar, beat, pitch_midi, duration_in_beats)`
+**1a. Lead sheet parser** ✓ DONE
+Reads Impro-Visor `.ls` files and produces a Python `LeadSheet` object:
+- Time signature, key signature (raw), tempo
+- Chord timeline: list of `ChordEvent(bar, beat, symbol, duration_beats)`
+- Handles `/` repeats, `NC` (no chord), slash chords, all meters
+- 2600+ file corpus passes 100% with no warnings
 
-**1b. Harmonic annotator**
+**1b. Harmonic annotator** — IN PROGRESS
 For each chord in the timeline, computes and caches:
-- Root, quality, extensions
-- Chord tones (R, 3, 5, 7)
-- Color tones (tensions: 9, 11, 13 and their alterations)
-- Associated scale (Dorian, Mixolydian, Lydian dominant, Locrian #2, etc.)
-- Full MIDI note pool for a given register
+- Root, quality (via `chord_preprocessor.py` — 832/832 corpus symbols passing music21)
+- Chord tones (R, 3, 5, 7), color tones (extensions), scale tones
+- Per-chord scale using resolution-aware lookahead (`annotator.py`)
+- **Tonal area** — which key center is active at each bar (`tonal_areas.py`, see below)
+
+**1b-roadmap. Tonal area detection** — IN PROGRESS
+Identifies the key center (tonal area) active at each point in the lead sheet using Impro-Visor's brick grammar. This is architecturally separate from per-chord scale selection and operates at a higher level of musical abstraction.
+
+**Strategy:** Reimplement Impro-Visor's roadmap analysis in Python. The Java system uses a CYK (Cocke-Younger-Kasami) parser over a recursive context-free grammar defined in `My.dictionary`. Each matched "brick" (harmonic idiom) carries a key center, and the `PostProcessor.findKeys()` method aggregates brick keys into contiguous `KeySpan` objects.
+
+**Pipeline:**
+```
+My.dictionary + My.substitutions
+      ↓  sexp_parser.py    — parse S-expression files
+      ↓  brick_library.py  — build recursive brick grammar
+                             (equiv rules, diatonic rules, defbrick definitions)
+                             auto-generates Overrun + Dropback for Cadence bricks
+      ↓  productions.py    — convert bricks to CYK grammar rules
+                             (UnaryProduction, BinaryProduction, binarization)
+      ↓  cyk_parser.py     — CYK bottom-up table fill + min-cost solution
+      ↓  post_processor.py — aggregate brick keys into KeySpan tonal areas
+      ↓
+ChordEvent.tonal_area  — music21 Key object
+ChordEvent.tonal_area_type — 'diatonic' | 'sequential' | 'passing'
+ChordEvent.tonal_area_scale — frozenset of pitch classes
+```
+
+**Current status of roadmap module (`python/roadmap/`):**
+- `sexp_parser.py` ✓ — tokenizes and parses Impro-Visor S-expression files
+- `chord_block.py` ✓ — terminal symbol with family classification and transposition
+- `equivalence.py` ✓ — bidirectional equivalence classes + substitution rules
+- `brick.py` ✓ — non-terminal with flatten/transpose/resolve operations
+- `brick_library.py` ✓ — loads My.dictionary, 818 brick variants, auto Overrun/Dropback
+- `productions.py` ✓ — UnaryProduction, BinaryProduction, binarization; chordDiff-based transposition-aware matching
+- `cyk_parser.py` — partially working; 2-chord cadences correct, 3-chord cadences mostly correct, key propagation has remaining bugs
+
+**Known remaining issues in `cyk_parser.py`:**
+1. 3-chord cadences sometimes detect wrong brick when multiple valid matches exist at equal cost — type cost system implemented but needs tuning
+2. `iiø-V-i` (minor ii-V-I) detected as two separate bricks instead of one `Sad Cadence` — overlap brick mechanism
+3. Key propagation for F major and non-C keys: bricks detected correctly but key=C instead of key=F
+4. `post_processor.py` not yet written — KeySpan aggregation pending
 
 **1c. Note function classifier**
-Given any MIDI pitch and the current chord, returns its functional label:
-- `C` — chord tone
-- `L` — color/tension tone
-- `S` — scale tone
-- `A` — chromatic or diatonic approach tone
-- `X` — outside/chromatic
-
-This is the primary runtime query interface for Phase 3.
+Given any MIDI pitch and the current chord + tonal area, returns its functional label:
+`C` (chord tone), `L` (color tone), `S` (scale tone), `A` (approach), `X` (outside).
 
 **1d. OSC broadcaster**
-- At startup: sends the full chord timeline to SuperCollider
+- At startup: sends chord timeline + tonal area map to SuperCollider
 - During playback: answers real-time note-function queries from SC
 
 ### Open questions
-- Do we treat the melody as a constraint on the improv (motivic development), or purely as reference material? This significantly affects 1b.
+- Do we treat the melody as a constraint on the improv (motivic development), or purely as reference material?
 - Do we handle AABA form explicitly, or treat the changes as a flat sequence?
 
 ---
@@ -249,49 +281,61 @@ Handles AABA or other form; tracks bar position; generates the next phrase sligh
 
 ## Summary Table
 
-| Phase | What | Where | Key resource | Main risk |
+| Phase | What | Where | Key resource | Status |
 |---|---|---|---|---|
-| 1a–1b | Lead sheet parsing + harmonic annotation | Python | music21 + Impro-Visor .ls | music21 learning curve |
-| 1c | Note function classifier | Python | music21 | edge cases in altered chords |
-| 1d | OSC broadcaster | Python | python-osc | latency / timing sync |
-| 2a–2b | Corpus ingestion + phrase segmentation | Python | Weimar Jazz DB | phrase boundary heuristics |
-| 2c | Grammar induction | Python | nltk / numpy | sparse data for rare players |
-| 2d | Grammar serializer → SC | Python | JSON / .scd | format design |
-| 2e | Hand-crafted grammar library | SC | Patterns | musical quality |
-| 3a | Grammar executor | SC | Patterns | CFG → Pattern mapping |
-| 3b | Pitch filler | SC + Python OSC | extended `~pickNote` | contour / musical coherence |
-| 3c | Phrase shape controller | SC | Patterns + TempoClock | real-time reliability |
-| 3d | MIDI output + articulation | SC → JACK → Reaper | MIDIOut + VSTi | JACK routing / latency |
-| 3e | Transport and form manager | SC + Reaper | TempoClock + JACK transport | tempo sync |
+| 1a | Lead sheet parsing | Python | Impro-Visor .ls format | ✓ Done |
+| 1b prep | Chord symbol normalizer | Python | music21 | ✓ Done (832/832) |
+| 1b | Harmonic annotator | Python | music21 | WIP |
+| 1b-roadmap | CYK brick parser | Python | My.dictionary | WIP (see below) |
+| 1c | Note function classifier | Python | music21 | TODO |
+| 1d | OSC broadcaster | Python | python-osc | TODO |
+| 2a–2b | Corpus ingestion + segmentation | Python | Weimar Jazz DB | TODO |
+| 2c | Grammar induction | Python | nltk / numpy | TODO |
+| 2d | Grammar serializer → SC | Python | JSON / .scd | TODO |
+| 2e | Hand-crafted grammar library | SC | Patterns | TODO |
+| 3a | Grammar executor | SC | Patterns | TODO |
+| 3b | Pitch filler | SC + Python OSC | extended `~pickNote` | TODO |
+| 3c | Phrase shape controller | SC | Patterns + TempoClock | TODO |
+| 3d | MIDI output + articulation | SC → JACK → Reaper | MIDIOut + VSTi | TODO |
+| 3e | Transport and form manager | SC + Reaper | TempoClock + JACK transport | TODO |
 
 ---
 
-## Suggested Build Order
+## Current State of the Project
 
-Rather than building phases strictly sequentially, this order minimises time to first audible result and keeps each step independently testable:
+### What is done
 
-1. **Phase 1a–1b** — lead sheet parser and harmonic annotator. Establishes the data model everything else depends on.
-2. **Phase 3b** — pitch filler upgrade using hardcoded theory. Immediately improves the existing SC prototype.
-3. **Phase 2e** — hand-crafted grammar in SC Patterns. Gives a working end-to-end system quickly.
-4. **Phase 1c + 1d** — OSC bridge. Replaces the hardcoded chord dictionary with live music21 queries.
-5. **Phase 2a–2d** — full grammar induction from Weimar corpus. The most ambitious piece; tackled once the rest works.
-6. **Phase 3c–3e** — phrase shape, articulation, and transport polish.
+**Phase 1a — Lead sheet parser** (`python/leadsheet/parser.py`)
+Parses Impro-Visor `.ls` files into `LeadSheet` objects with full `ChordEvent` timelines. Handles all meters, slash chords, NC tokens, repeat bars. 100% pass rate across 2600+ corpus files.
 
-Steps 1–3 produce a system that plays music. Steps 4–6 make it progressively more musically intelligent.
+**Phase 1b prep — Chord preprocessor** (`python/leadsheet/chord_preprocessor.py`)
+Normalizes Impro-Visor chord symbols to music21-compatible figure strings. Handles flat-root parsing bug, unsupported quality abbreviations (`7alt`, `maj9`, `m69` etc.). 832/832 corpus symbols passing music21.
 
----
+**Harmonic annotator** (`python/leadsheet/annotator.py`)
+Annotates each `ChordEvent` with music21 `ChordSymbol`, chord tones, color tones, scale tones, and scale name. Uses resolution-aware lookahead for dominant chords (e.g. `D7→Gm7` gets `hw_diminished`, `C7→FM7` gets `mixolydian`).
 
-## Current Prototype Status
+**Roadmap module** (`python/roadmap/`) — partial
+Reimplements Impro-Visor's CYK-based harmonic analysis in Python:
+- `sexp_parser.py` — S-expression parser for `.dictionary` files
+- `chord_block.py` — terminal symbol with family classification
+- `equivalence.py` — bidirectional chord equivalence + substitution
+- `brick.py` — recursive harmonic pattern (non-terminal)
+- `brick_library.py` — loads My.dictionary, 818 brick variants
+- `productions.py` — CYK grammar rules with transposition-aware matching
+- `cyk_parser.py` — CYK parser, partially working
 
-A working SuperCollider prototype exists for **Bye Bye Blackbird** (F major, 32-bar AABA) implementing a simplified version of Phase 3:
+### What is in progress
 
-- Hardcoded chord → scale dictionary (`~scaleLib`, `~chordMap`)
-- Hybrid pitch filler (`~pickNote`) with chord-tone / scale-tone weighting and contour memory
-- Swing 8th rhythm cells with probabilistic selection (`Pwrand`)
-- Simple additive sine SynthDef (`\jazzTone`) — **to be replaced by MIDI output to Reaper**
-- Full 32-bar chord timeline (`~changes`)
+**`cyk_parser.py`** — three known bugs remain:
+1. 3-chord cadences occasionally pick wrong brick (e.g. `Happenstance Cadence` instead of `Straight Cadence`) when multiple matches have equal cost
+2. Minor ii-V-i detected as two overlapping bricks instead of one `Sad Cadence`
+3. Key propagation for non-C keys partially broken — some bricks return key=C instead of actual key
 
-This prototype lives at `supercollider/trad_four_prototype.scd` and corresponds roughly to **Phase 3b + 2e (partial)**, without the Python layer or OSC bridge. It serves as the execution scaffold into which Phase 1 and Phase 2 outputs will be integrated.
+**Next immediate task:** fix these three bugs in `cyk_parser.py`, then write `post_processor.py` to aggregate brick keys into `KeySpan` tonal areas (mirrors `PostProcessor.findKeys()` in Impro-Visor Java).
+
+### What is not yet started
+
+Phases 1c, 1d, 2a–2d, 2e, 3a–3e.
 
 ---
 
@@ -304,9 +348,20 @@ trad-four/
 │   ├── leadsheet/
 │   │   ├── parser.py              # Phase 1a — Impro-Visor .ls parser ✓
 │   │   ├── chord_preprocessor.py  # Phase 1b prep — music21 symbol normalizer ✓
-│   │   ├── annotator.py           # Phase 1b — harmonic annotation
+│   │   ├── annotator.py           # Phase 1b — harmonic annotation (WIP)
+│   │   ├── tonal_areas.py         # Phase 1b — Roman numeral tonal area (superseded)
 │   │   ├── classifier.py          # Phase 1c — note function classifier
 │   │   └── osc_bridge.py          # Phase 1d — OSC broadcaster
+│   ├── roadmap/                   # Phase 1b-roadmap — CYK brick parser
+│   │   ├── __init__.py
+│   │   ├── sexp_parser.py         # S-expression tokenizer/parser ✓
+│   │   ├── chord_block.py         # terminal symbol ✓
+│   │   ├── equivalence.py         # EquivalenceDictionary + SubstitutionDictionary ✓
+│   │   ├── brick.py               # non-terminal symbol ✓
+│   │   ├── brick_library.py       # loads My.dictionary, 818 variants ✓
+│   │   ├── productions.py         # UnaryProduction, BinaryProduction ✓
+│   │   ├── cyk_parser.py          # CYK table fill + solution extraction (WIP)
+│   │   └── post_processor.py      # KeySpan aggregation (TODO)
 │   ├── grammar/
 │   │   ├── ingestion.py           # Phase 2a — Weimar DB corpus reader
 │   │   ├── segmenter.py           # Phase 2b — phrase segmenter
@@ -332,7 +387,9 @@ trad-four/
 │   ├── weimar/                    # Weimar Jazz Database SQLite
 │   └── chord_symbols.txt          # unique chord vocabulary extracted from corpus ✓
 └── docs/
-    └── plan.md                    # this document
+    ├── plan.md                    # this document
+    ├── literature_review.md       # survey of algorithmic jazz improvisation research
+    └── related_projects.md        # survey of reusable software (dicy2, roadmap_parser, etc.)
 ```
 
 ### Audio signal chain (Linux/Arch)
