@@ -113,42 +113,50 @@ For each chord in the timeline, computes and caches:
 - Per-chord scale using resolution-aware lookahead (`annotator.py`)
 - **Tonal area** — which key center is active at each bar (`tonal_areas.py`, see below)
 
-**1b-roadmap. Tonal area detection** — IN PROGRESS
+**1b-roadmap. Tonal area detection** ✓ DONE
 Identifies the key center (tonal area) active at each point in the lead sheet using Impro-Visor's brick grammar. This is architecturally separate from per-chord scale selection and operates at a higher level of musical abstraction.
 
-**Strategy:** Reimplement Impro-Visor's roadmap analysis in Python. The Java system uses a CYK (Cocke-Younger-Kasami) parser over a recursive context-free grammar defined in `My.dictionary`. Each matched "brick" (harmonic idiom) carries a key center, and the `PostProcessor.findKeys()` method aggregates brick keys into contiguous `KeySpan` objects.
+**Strategy:** Reimplements Impro-Visor's roadmap analysis in Python. The Java system uses a CYK (Cocke-Younger-Kasami) parser over a recursive context-free grammar defined in `My.dictionary`. Each matched "brick" (harmonic idiom) carries a key center, and the `PostProcessor.findKeys()` method aggregates brick keys into contiguous `KeySpan` objects.
 
-**Pipeline:**
+**Pipeline input/output:**
 ```
-My.dictionary + My.substitutions
-      ↓  sexp_parser.py    — parse S-expression files
-      ↓  brick_library.py  — build recursive brick grammar
-                             (equiv rules, diatonic rules, defbrick definitions)
-                             auto-generates Overrun + Dropback for Cadence bricks
-      ↓  productions.py    — convert bricks to CYK grammar rules
-                             (UnaryProduction, BinaryProduction, binarization)
-      ↓  cyk_parser.py     — CYK bottom-up table fill + min-cost solution
-      ↓  post_processor.py — aggregate brick keys into KeySpan tonal areas
-      ↓
-ChordEvent.tonal_area  — music21 Key object
-ChordEvent.tonal_area_type — 'diatonic' | 'sequential' | 'passing'
-ChordEvent.tonal_area_scale — frozenset of pitch classes
+INPUT
+  My.dictionary              — brick grammar definitions (818 brick variants)
+  My.substitutions           — chord equivalence + substitution rules
+  list[ChordEvent]           — chord timeline from the lead sheet parser (Phase 1a)
+
+PIPELINE
+  sexp_parser.py             — parse S-expression dictionary files
+      → list[SExp]
+  brick_library.py           — build recursive brick grammar from S-expressions
+      → BrickLibrary            (equiv rules, diatonic rules, defbrick definitions,
+                                 auto-generated Overrun + Dropback for Cadence bricks)
+  productions.py             — convert BrickLibrary to CYK grammar rules
+      → list[UnaryProduction]   (single-chord bricks)
+      → list[BinaryProduction]  (multi-chord bricks, with binarization for N>2)
+  cyk_parser.py              — CYK bottom-up table fill + DP min-cost solution
+      → list[Block]             (mix of recognized Brick objects and bare ChordBlocks)
+  post_processor.py          — right-to-left scan aggregating brick keys
+      → list[KeySpan]           (contiguous tonal areas: key + mode + duration)
+
+OUTPUT
+  list[KeySpan]  — each KeySpan carries:
+    key      : int (pitch class 0-11)
+    mode     : str ('Major', 'Minor', or 'Dominant')
+    duration : Fraction (total beats spanned)
 ```
 
-**Current status of roadmap module (`python/roadmap/`):**
+Verified on Bye Bye Blackbird (F major), Autumn Leaves (Bb/Gm), Blue Bossa (Cm→Db→Cm), Now's the Time (F blues), and Body and Soul (Db with D major bridge). Test suite: 174 tests, 85% line coverage across the roadmap module.
+
+**Roadmap module files (`python/roadmap/`):**
 - `sexp_parser.py` ✓ — tokenizes and parses Impro-Visor S-expression files
 - `chord_block.py` ✓ — terminal symbol with family classification and transposition
 - `equivalence.py` ✓ — bidirectional equivalence classes + substitution rules
 - `brick.py` ✓ — non-terminal with flatten/transpose/resolve operations
 - `brick_library.py` ✓ — loads My.dictionary, 818 brick variants, auto Overrun/Dropback
 - `productions.py` ✓ — UnaryProduction, BinaryProduction, binarization; chordDiff-based transposition-aware matching
-- `cyk_parser.py` — partially working; 2-chord cadences correct, 3-chord cadences mostly correct, key propagation has remaining bugs
-
-**Known remaining issues in `cyk_parser.py`:**
-1. 3-chord cadences sometimes detect wrong brick when multiple valid matches exist at equal cost — type cost system implemented but needs tuning
-2. `iiø-V-i` (minor ii-V-I) detected as two separate bricks instead of one `Sad Cadence` — overlap brick mechanism
-3. Key propagation for F major and non-C keys: bricks detected correctly but key=C instead of key=F
-4. `post_processor.py` not yet written — KeySpan aggregation pending
+- `cyk_parser.py` ✓ — CYK table fill + DP min-cost non-overlapping cover extraction
+- `post_processor.py` ✓ — aggregates brick keys into KeySpan tonal areas (right-to-left scan with diatonic absorption and approach resolution)
 
 **1c. Note function classifier**
 Given any MIDI pitch and the current chord + tonal area, returns its functional label:
@@ -286,7 +294,7 @@ Handles AABA or other form; tracks bar position; generates the next phrase sligh
 | 1a | Lead sheet parsing | Python | Impro-Visor .ls format | ✓ Done |
 | 1b prep | Chord symbol normalizer | Python | music21 | ✓ Done (832/832) |
 | 1b | Harmonic annotator | Python | music21 | WIP |
-| 1b-roadmap | CYK brick parser | Python | My.dictionary | WIP (see below) |
+| 1b-roadmap | CYK brick parser + KeySpan aggregation | Python | My.dictionary | ✓ Done |
 | 1c | Note function classifier | Python | music21 | TODO |
 | 1d | OSC broadcaster | Python | python-osc | TODO |
 | 2a–2b | Corpus ingestion + segmentation | Python | Weimar Jazz DB | TODO |
@@ -314,24 +322,20 @@ Normalizes Impro-Visor chord symbols to music21-compatible figure strings. Handl
 **Harmonic annotator** (`python/leadsheet/annotator.py`)
 Annotates each `ChordEvent` with music21 `ChordSymbol`, chord tones, color tones, scale tones, and scale name. Uses resolution-aware lookahead for dominant chords (e.g. `D7→Gm7` gets `hw_diminished`, `C7→FM7` gets `mixolydian`).
 
-**Roadmap module** (`python/roadmap/`) — partial
-Reimplements Impro-Visor's CYK-based harmonic analysis in Python:
+**Roadmap module** (`python/roadmap/`) ✓
+Reimplements Impro-Visor's CYK-based harmonic analysis in Python. Full pipeline from lead sheet chords to `list[KeySpan]` tonal areas:
 - `sexp_parser.py` — S-expression parser for `.dictionary` files
-- `chord_block.py` — terminal symbol with family classification
+- `chord_block.py` — terminal symbol with family classification and transposition
 - `equivalence.py` — bidirectional chord equivalence + substitution
 - `brick.py` — recursive harmonic pattern (non-terminal)
-- `brick_library.py` — loads My.dictionary, 818 brick variants
+- `brick_library.py` — loads My.dictionary, 818 brick variants, auto Overrun/Dropback
 - `productions.py` — CYK grammar rules with transposition-aware matching
-- `cyk_parser.py` — CYK parser, partially working
+- `cyk_parser.py` — CYK table fill + DP min-cost non-overlapping cover extraction
+- `post_processor.py` — aggregates brick keys into KeySpan tonal areas (right-to-left scan)
 
 ### What is in progress
 
-**`cyk_parser.py`** — three known bugs remain:
-1. 3-chord cadences occasionally pick wrong brick (e.g. `Happenstance Cadence` instead of `Straight Cadence`) when multiple matches have equal cost
-2. Minor ii-V-i detected as two overlapping bricks instead of one `Sad Cadence`
-3. Key propagation for non-C keys partially broken — some bricks return key=C instead of actual key
-
-**Next immediate task:** fix these three bugs in `cyk_parser.py`, then write `post_processor.py` to aggregate brick keys into `KeySpan` tonal areas (mirrors `PostProcessor.findKeys()` in Impro-Visor Java).
+**Next immediate task:** integrate `KeySpan` tonal areas from the roadmap module into `ChordEvent.tonal_area` in the harmonic annotator, then proceed to Phase 1c (note function classifier).
 
 ### What is not yet started
 
@@ -352,7 +356,7 @@ trad-four/
 │   │   ├── tonal_areas.py         # Phase 1b — Roman numeral tonal area (superseded)
 │   │   ├── classifier.py          # Phase 1c — note function classifier
 │   │   └── osc_bridge.py          # Phase 1d — OSC broadcaster
-│   ├── roadmap/                   # Phase 1b-roadmap — CYK brick parser
+│   ├── roadmap/                   # Phase 1b-roadmap — CYK brick parser ✓
 │   │   ├── __init__.py
 │   │   ├── sexp_parser.py         # S-expression tokenizer/parser ✓
 │   │   ├── chord_block.py         # terminal symbol ✓
@@ -360,8 +364,8 @@ trad-four/
 │   │   ├── brick.py               # non-terminal symbol ✓
 │   │   ├── brick_library.py       # loads My.dictionary, 818 variants ✓
 │   │   ├── productions.py         # UnaryProduction, BinaryProduction ✓
-│   │   ├── cyk_parser.py          # CYK table fill + solution extraction (WIP)
-│   │   └── post_processor.py      # KeySpan aggregation (TODO)
+│   │   ├── cyk_parser.py          # CYK table fill + solution extraction ✓
+│   │   └── post_processor.py      # KeySpan aggregation ✓
 │   ├── grammar/
 │   │   ├── ingestion.py           # Phase 2a — Weimar DB corpus reader
 │   │   ├── segmenter.py           # Phase 2b — phrase segmenter
@@ -369,7 +373,9 @@ trad-four/
 │   │   └── serializer.py          # Phase 2d — JSON / .scd export
 │   ├── tests/
 │   │   ├── test_parser.py         # corpus-wide parser tests ✓
-│   │   └── test_music21_chords.py # music21 symbol compatibility tests ✓
+│   │   ├── test_music21_chords.py # music21 symbol compatibility tests ✓
+│   │   ├── test_roadmap_units.py  # roadmap module unit tests (130 tests) ✓
+│   │   └── test_post_processor.py # CYK + KeySpan integration tests (44 tests) ✓
 │   └── requirements.txt
 ├── supercollider/
 │   ├── trad_four_prototype.scd    # current prototype (Bye Bye Blackbird test case)
