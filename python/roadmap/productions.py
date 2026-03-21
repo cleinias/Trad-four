@@ -96,7 +96,7 @@ class TreeNode:
     cost:     float = 0.0
     chord_diff: int = 0          # key transposition used in matching
     is_sub:   bool  = False      # matched via substitution
-    is_overlap: bool = False     # overlap brick
+    overlap:  bool  = False      # overlap brick (renamed from is_overlap)
     _show:    bool  = True       # whether to show in solution
 
     def is_leaf(self) -> bool:
@@ -106,9 +106,6 @@ class TreeNode:
         if self.chord is not None:
             return self.chord.is_section_end
         return False
-
-    def is_overlap(self) -> bool:
-        return self.is_overlap
 
     def to_show(self) -> bool:
         return self._show
@@ -121,7 +118,7 @@ class TreeNode:
         """Return a copy of this node marked as an overlap brick."""
         import copy
         c = copy.copy(self)
-        c.is_overlap = True
+        c.overlap = True
         return c
 
     def get_duration(self) -> Fraction:
@@ -193,10 +190,11 @@ def _match_chord_to_block(chord: ChordBlock,
                            target: Block,
                            dicts: 'ChordDictionaries') -> MatchValue:
     """
-    Try to match a chord (from a brick definition, C-rooted and transposed)
+    Try to match a chord (from a brick definition, C-rooted)
     against a target block (from the chord sequence).
 
-    Returns a MatchValue with the match result and cost.
+    chordDiff = (target.root - chord.root) % 12 — the transposition needed.
+    This is how the Java determines the key of a matched brick.
     """
     if isinstance(target, TreeNode):
         target_chord = target.chord
@@ -210,21 +208,23 @@ def _match_chord_to_block(chord: ChordBlock,
     if target_chord.is_nochord():
         return MatchValue.NO_MATCH
 
-    # Roots must match
-    if chord.root != target_chord.root:
-        return MatchValue.NO_MATCH
+    # Compute transposition from definition to actual chord
+    chord_diff = (target_chord.root - chord.root) % 12
+
+    # Transpose definition chord to match target's key
+    transposed = chord.transpose(chord_diff)
 
     # Exact match
-    if chord.quality == target_chord.quality:
-        return MatchValue(chordDiff=0, cost=0.0, familyMatch=False)
+    if transposed.quality == target_chord.quality:
+        return MatchValue(chordDiff=chord_diff, cost=0.0, familyMatch=False)
 
     # Equivalence match
-    if dicts.equiv.are_equivalent(chord, target_chord):
-        return MatchValue(chordDiff=0, cost=5.0, familyMatch=False)
+    if dicts.equiv.are_equivalent(transposed, target_chord):
+        return MatchValue(chordDiff=chord_diff, cost=5.0, familyMatch=False)
 
-    # Substitution match (target can substitute for chord definition)
-    if dicts.sub.can_substitute(target_chord, chord):
-        return MatchValue(chordDiff=0, cost=5.0, familyMatch=True)
+    # Substitution match
+    if dicts.sub.can_substitute(target_chord, transposed):
+        return MatchValue(chordDiff=chord_diff, cost=5.0, familyMatch=True)
 
     return MatchValue.NO_MATCH
 
@@ -269,9 +269,9 @@ class UnaryProduction:
                           dicts: 'ChordDictionaries') -> MatchValue:
         """
         Check if this production matches the given tree node.
-        The node must be a leaf (single chord).
-
-        Returns MatchValue — chordDiff >= 0 if matched.
+        Only matches leaf nodes (single chords).
+        Mirrors UnaryProduction.checkProduction() in Java which returns
+        NO_MATCH immediately for non-leaf nodes.
         """
         if not node.is_leaf():
             return MatchValue.NO_MATCH
@@ -340,30 +340,29 @@ class BinaryProduction:
 
     def check_production(self,
                           left_node: 'TreeNode',
-                          right_node: 'TreeNode') -> MatchValue:
+                          right_node: 'TreeNode',
+                          dicts: 'ChordDictionaries | None' = None) -> MatchValue:
         """
         Check if this production matches two adjacent tree nodes.
-
-        For each sub-block:
-          - ChordBlock: the node must be a leaf with a matching chord
-          - Brick: the node's head must match the brick's name
-
-        Returns MatchValue — chordDiff >= 0 if matched.
         """
-        # Match left sub-block
-        left_match = self._match_subblock(self.left, left_node)
+        left_match = self._match_subblock(self.left, left_node, dicts)
         if not left_match.matched:
             return MatchValue.NO_MATCH
 
-        # Match right sub-block
-        right_match = self._match_subblock(self.right, right_node)
+        right_match = self._match_subblock(self.right, right_node, dicts)
         if not right_match.matched:
             return MatchValue.NO_MATCH
 
-        # Combine costs
+        # Both sub-blocks must agree on the transposition
+        # This prevents a brick defined in key E from matching chords in key C
+        left_diff  = left_match.chordDiff
+        right_diff = right_match.chordDiff
+        if left_diff != right_diff:
+            return MatchValue.NO_MATCH
+
         total_cost = left_match.cost + right_match.cost
         family_match = left_match.familyMatch or right_match.familyMatch
-        chord_diff = left_match.chordDiff
+        chord_diff = left_diff
 
         return MatchValue(
             chordDiff=chord_diff,
@@ -373,7 +372,8 @@ class BinaryProduction:
 
     def _match_subblock(self,
                          subblock: Block,
-                         node: 'TreeNode') -> MatchValue:
+                         node: 'TreeNode',
+                         dicts: 'ChordDictionaries | None' = None) -> MatchValue:
         """
         Match a single sub-block definition against a tree node.
         """
@@ -384,42 +384,50 @@ class BinaryProduction:
             if node.chord is None:
                 return MatchValue.NO_MATCH
             chord = node.chord
-            if subblock.root != chord.root:
+            if chord.is_nochord():
                 return MatchValue.NO_MATCH
-            if subblock.quality == chord.quality:
-                return MatchValue(chordDiff=0, cost=0.0)
-            # No dicts available here — exact match only at binary level
-            # Equivalence checking happens in UnaryProduction / findTerminal
-            return MatchValue.NO_MATCH
-
-        elif isinstance(subblock, Brick):
-            # Non-terminal: node's head must match brick name
-            if node.is_leaf():
-                # A leaf can match a single-chord brick
-                if subblock.is_single_chord():
-                    flat = subblock.flatten()
-                    if flat and node.chord:
-                        if (flat[0].root == node.chord.root and
-                                flat[0].quality == node.chord.quality):
-                            return MatchValue(chordDiff=0, cost=0.0)
-                return MatchValue.NO_MATCH
-
-            # Check name match
-            if node.head == subblock.name:
-                return MatchValue(chordDiff=0, cost=0.0)
-
-            # Also match invisible bricks with the same key/mode
-            if (node.ptype == 'Invisible' and
-                    node.key == subblock.key and
-                    node.mode == subblock.mode):
-                return MatchValue(chordDiff=0, cost=5.0, familyMatch=True)
-
+            # Compute transposition from definition chord to actual chord
+            chord_diff = (chord.root - subblock.root) % 12
+            transposed = subblock.transpose(chord_diff)
+            # Exact quality match after transposition
+            if transposed.quality == chord.quality:
+                return MatchValue(chordDiff=chord_diff, cost=0.0)
+            # Equivalence match
+            if dicts is not None:
+                if dicts.equiv.are_equivalent(transposed, chord):
+                    return MatchValue(chordDiff=chord_diff, cost=5.0, familyMatch=False)
+                if dicts.sub.can_substitute(chord, transposed):
+                    return MatchValue(chordDiff=chord_diff, cost=5.0, familyMatch=True)
             return MatchValue.NO_MATCH
 
         elif isinstance(subblock, IntermediateBrick):
-            # Intermediate binarization node
+            if node.is_leaf():
+                return MatchValue.NO_MATCH
             if node.head == subblock.name:
-                return MatchValue(chordDiff=0, cost=0.0)
+                # chordDiff = how much the node is transposed relative to definition
+                diff = (node.key - subblock.key) % 12
+                return MatchValue(chordDiff=diff, cost=0.0)
+            return MatchValue.NO_MATCH
+
+        elif isinstance(subblock, Brick):
+            if node.is_leaf():
+                if subblock.is_single_chord():
+                    flat = subblock.flatten()
+                    if flat and node.chord:
+                        chord_diff = (node.chord.root - flat[0].root) % 12
+                        transposed = flat[0].transpose(chord_diff)
+                        if transposed.quality == node.chord.quality:
+                            return MatchValue(chordDiff=chord_diff, cost=0.0)
+                        if dicts is not None:
+                            if dicts.equiv.are_equivalent(transposed, node.chord):
+                                return MatchValue(chordDiff=chord_diff, cost=5.0)
+                return MatchValue.NO_MATCH
+
+            if node.head == subblock.name:
+                # chordDiff = how much the node is transposed relative to definition
+                diff = (node.key - subblock.key) % 12
+                return MatchValue(chordDiff=diff, cost=0.0)
+
             return MatchValue.NO_MATCH
 
         return MatchValue.NO_MATCH
