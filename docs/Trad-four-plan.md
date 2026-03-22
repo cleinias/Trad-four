@@ -300,15 +300,27 @@ Maps typed note events to MIDI pitches using the current chord's pitch class set
 Slope events are flattened to their component notes before resolution. All pitches clamped to `min_pitch`..`max_pitch` from grammar parameters (58–82 for Lester Young = Bb3–Bb5).
 
 **3f. SC playback engine** ✓ DONE (`supercollider/TradFourPlayer.scd`)
-`TempoClock` synced to lead sheet tempo. MIDI output via `MIDIOut` → JACK virtual port → Reaper. Walks pre-generated note sequence, scheduling `noteOn`/`noteOff` pairs with 90% sustain / 10% gap for natural articulation. Velocity varies by note type (C=90, X=80, L=75, S=70, A=65).
+Uses `~tradFourClock` (from MIDISyncSetup) for tempo. MIDI output via `MIDIOut` → JACK virtual port → Reaper. Two playback modes: `play` (full solo) and `playTrading` (alternating computer/human phrases). Walks pre-generated note sequence, scheduling `noteOn`/`noteOff` pairs with 90% sustain / 10% gap for natural articulation. Velocity varies by note type (C=90, X=80, L=75, S=70, A=65). Fires `~tradFour[\onStatus]` callbacks for GUI status updates.
 
 **3g. SC main launcher** ✓ DONE (`supercollider/main.scd`)
-Loads all SC modules, initializes MIDI, loads grammar JSON, starts OSC listener. On `/trad4/done`, auto-generates and plays solo. Provides `~tradFour.generate` (replay with new random seed) and `~tradFour.stop`.
+Loads all SC modules, initializes MIDI sync and output, loads grammar JSON, starts OSC listener, loads GUI. On `/trad4/done`, auto-generates and plays solo. Main controller `~tradFour` dispatches to full solo or trading mode based on `tradingMode` flag. Provides `~tradFour[\generate]` (replay with new random seed) and `~tradFour[\stop]`.
+
+**3h. MIDI sync (Reaper as master)** ✓ DONE (`supercollider/MIDISyncSetup.scd`)
+Uses ddwMIDI Quark's `MIDISyncClock` to receive MIDI clock from Reaper (F8 ticks, FA start, FC stop). Stores clock in `~tradFourClock` for use by TradFourPlayer. Fallback: `useMIDISync: false` creates a standalone `TempoClock`. Prerequisite: `Quarks.install("ddwMIDI")`.
+
+**3i. Trading bars** ✓ DONE (in `main.scd` + `TradFourPlayer.scd`)
+"Trading fours" mode: computer and human alternate N-bar turns (2, 4, or 8 bars). Each computer turn is an independently generated phrase with its own melodic arc — not a fragment of a longer solo. Configurable: `tradingBars` (default 4), `humanFirst` (who starts). Chord timeline is windowed per turn so the pitch resolver sees only the chords for that bar range.
+
+**3j. GUI** ✓ DONE (`supercollider/TradFourGUI.scd`)
+Minimalist Qt GUI: grammar dropdown (auto-populated from `grammars/*.json`), lead sheet file browser + Send button (runs Python pipeline via `unixCmd`), trading controls (bars: 2/4/8, human first, trading mode checkboxes), action buttons (Generate, Reseed, Stop), and live status display (current action, tune name + key, tempo from clock updated via `SkipJack`).
+
+**Key detection fix** ✓ DONE (in `python/leadsheet/tonal_areas.py` + `osc_bridge.py`)
+Replaced music21's Krumhansl-Schmuckler key inference with `majority_key()` — uses the KeySpan with the longest duration from the roadmap CYK analysis. Fixes relative minor confusion (e.g. Bye Bye Blackbird: was "g minor", now correctly "F Major").
 
 ### Open questions (deferred)
 - Brick type matching: select BRICK rules not just by duration but by matching against the roadmap's detected brick type at that position
 - Phrase shape: manage higher-level contour arc across the solo
-- Active trading: listen to a human player and respond (currently autonomous only)
+- Active trading: listen to a human player and respond in real time (currently pre-generated turns)
 - Form awareness: handle AABA repeats explicitly vs. flat sequence
 
 ---
@@ -332,8 +344,11 @@ Loads all SC modules, initializes MIDI, loads grammar JSON, starts OSC listener.
 | 3c | Grammar loader (JSON → SC) | SC | parseYAML | ✓ Done |
 | 3d | Grammar expander (P → notes) | SC | recursive expansion | ✓ Done |
 | 3e | Pitch resolver (types → MIDI) | SC | proximity voice leading | ✓ Done |
-| 3f | MIDI playback engine | SC → JACK → Reaper | MIDIOut + TempoClock | ✓ Done |
+| 3f | MIDI playback engine | SC → JACK → Reaper | MIDIOut + ~tradFourClock | ✓ Done |
 | 3g | Main launcher + integration | SC | all modules | ✓ Done |
+| 3h | MIDI sync (Reaper master) | SC | ddwMIDI MIDISyncClock | ✓ Done |
+| 3i | Trading bars | SC | independent phrase generation | ✓ Done |
+| 3j | GUI | SC | Qt (Window, PopUpMenu, etc.) | ✓ Done |
 
 ---
 
@@ -355,8 +370,11 @@ Loads all SC modules, initializes MIDI, loads grammar JSON, starts OSC listener.
 - `supercollider/GrammarLoader.scd` — JSON grammar loader with `weightedChoose` helper
 - `supercollider/GrammarExpander.scd` — recursive grammar expansion (BRICK + START→Cluster→Q paths)
 - `supercollider/PitchResolver.scd` — note type → MIDI pitch resolution with proximity voice leading
-- `supercollider/TradFourPlayer.scd` — TempoClock + MIDIOut playback with velocity by note type
-- `supercollider/main.scd` — integration launcher with auto-generate on OSC receive
+- `supercollider/TradFourPlayer.scd` — MIDIOut playback (full solo + trading bars), uses `~tradFourClock`
+- `supercollider/MIDISyncSetup.scd` — MIDI clock sync (Reaper master) via ddwMIDI, standalone fallback
+- `supercollider/TradFourGUI.scd` — Qt GUI: grammar selector, lead sheet loader, trading controls, status
+- `supercollider/main.scd` — integration launcher with trading bars, MIDI sync, GUI, auto-generate
+- Key detection fix: `majority_key()` in `tonal_areas.py` replaces music21's Krumhansl-Schmuckler
 
 ### What is next
 
@@ -409,11 +427,13 @@ trad-four/
 │   └── requirements.txt
 ├── supercollider/
 │   ├── main.scd                       # Phase 3g — integration launcher ✓
+│   ├── MIDISyncSetup.scd             # Phase 3h — MIDI clock sync (Reaper master) ✓
 │   ├── TradFourReceiver.scd           # Phase 3b — OSC chord timeline receiver ✓
 │   ├── GrammarLoader.scd              # Phase 3c — JSON grammar loader ✓
 │   ├── GrammarExpander.scd            # Phase 3d — recursive grammar expansion ✓
 │   ├── PitchResolver.scd              # Phase 3e — note type → MIDI pitch ✓
-│   ├── TradFourPlayer.scd             # Phase 3f — TempoClock + MIDI playback ✓
+│   ├── TradFourPlayer.scd             # Phase 3f — MIDI playback (full + trading) ✓
+│   ├── TradFourGUI.scd               # Phase 3j — Qt GUI ✓
 │   └── grammars/
 │       └── LesterYoung.json           # converted grammar (948 BRICK rules) ✓
 ├── data/
