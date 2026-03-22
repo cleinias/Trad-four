@@ -69,7 +69,7 @@ Good reference for understanding the PST data structure and suffix-matching algo
 
 ### Impro-Visor grammar files
 
-**Location:** `/usr/share/impro-visor/grammars/` (local installation)  
+**Location:** `data/grammars/` (85 `.grammar` files, copied from Impro-Visor)  
 **Repository:** https://github.com/Impro-Visor/Impro-Visor/tree/master/grammars  
 **Format:** Custom S-expression DSL (`.grammar` files)  
 **License:** GPL-2.0  

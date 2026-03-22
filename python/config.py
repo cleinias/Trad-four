@@ -13,3 +13,6 @@ VOCAB_DIR      = DATA_DIR / 'vocab'
 LEADSHEETS_DIR = DATA_DIR / 'leadsheets'
 DICT_PATH      = VOCAB_DIR / 'My.dictionary'
 SUB_PATH       = VOCAB_DIR / 'My.substitutions'
+
+GRAMMARS_DIR        = PROJECT_ROOT / 'supercollider' / 'grammars'
+SOURCE_GRAMMARS_DIR = DATA_DIR / 'grammars'
