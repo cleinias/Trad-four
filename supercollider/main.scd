@@ -8,10 +8,10 @@
 //   3. SC receives chords, generates solo, plays via MIDI → JACK → Reaper
 //
 // To replay with a new solo over the same chords:
-//   ~tradFour.generate;
+//   ~tradFour[\generate].value(~tradFour);
 //
 // To stop playback:
-//   ~tradFour.stop;
+//   ~tradFour[\stop].value(~tradFour);
 
 (
 // ---------------------------------------------------------------
@@ -22,23 +22,24 @@ var grammarPath = thisProcess.nowExecutingPath.dirname +/+ "grammars/LesterYoung
 // ---------------------------------------------------------------
 // Load all modules
 // ---------------------------------------------------------------
-(thisProcess.nowExecutingPath.dirname +/+ "TradFourReceiver.scd").load;
-(thisProcess.nowExecutingPath.dirname +/+ "GrammarLoader.scd").load;
-(thisProcess.nowExecutingPath.dirname +/+ "GrammarExpander.scd").load;
-(thisProcess.nowExecutingPath.dirname +/+ "PitchResolver.scd").load;
-(thisProcess.nowExecutingPath.dirname +/+ "TradFourPlayer.scd").load;
+var dir = thisProcess.nowExecutingPath.dirname;
+(dir +/+ "TradFourReceiver.scd").load;
+(dir +/+ "GrammarLoader.scd").load;
+(dir +/+ "GrammarExpander.scd").load;
+(dir +/+ "PitchResolver.scd").load;
+(dir +/+ "TradFourPlayer.scd").load;
 
 "TradFour: all modules loaded".postln;
 
 // ---------------------------------------------------------------
 // Load grammar
 // ---------------------------------------------------------------
-~grammarLoader.load(grammarPath);
+~grammarLoader[\load].value(~grammarLoader, grammarPath);
 
 // ---------------------------------------------------------------
 // Initialize MIDI
 // ---------------------------------------------------------------
-~tradFourPlayer.init;
+~tradFourPlayer[\init].value(~tradFourPlayer);
 
 // ---------------------------------------------------------------
 // Main controller
@@ -53,7 +54,7 @@ var grammarPath = thisProcess.nowExecutingPath.dirname +/+ "grammars/LesterYoung
             "TradFour: no chord data loaded — send a lead sheet via OSC first".postln;
         } {
             // Calculate total duration from chord timeline
-            totalBeats = ~trad4[\chords].collect(_.duration).sum;
+            totalBeats = ~trad4[\chords].sum { |c| c[\duration] };
             totalTicks = (totalBeats * ~grammarExpander[\ticksPerBeat]).asInteger;
 
             "TradFour: generating solo — % beats (% ticks) over % chords".format(
@@ -61,32 +62,36 @@ var grammarPath = thisProcess.nowExecutingPath.dirname +/+ "grammars/LesterYoung
             ).postln;
 
             // Expand grammar → note events
-            noteEvents = ~grammarExpander.expand(totalTicks);
+            noteEvents = ~grammarExpander[\expand].value(~grammarExpander, totalTicks);
             "TradFour: expanded to % note events".format(noteEvents.size).postln;
 
             // Resolve pitches using chord timeline
-            resolved = ~pitchResolver.resolve(noteEvents, ~trad4[\chords], ~grammar);
+            resolved = ~pitchResolver[\resolve].value(
+                ~pitchResolver, noteEvents, ~trad4[\chords], ~grammar
+            );
             "TradFour: resolved % pitches".format(resolved.size).postln;
 
             // Play
-            ~tradFourPlayer.play(resolved, ~trad4[\tempo]);
+            ~tradFourPlayer[\play].value(~tradFourPlayer, resolved, ~trad4[\tempo]);
         };
     },
 
     // Stop playback
     stop: { |self|
-        ~tradFourPlayer.stop;
+        ~tradFourPlayer[\stop].value(~tradFourPlayer);
     }
 );
 
 // ---------------------------------------------------------------
 // Start OSC receiver with auto-generate callback
 // ---------------------------------------------------------------
-~trad4Receiver.start;
+~trad4Receiver[\start].value(~trad4Receiver);
 ~trad4[\onDone] = { |trad4|
     "TradFour: auto-generating solo...".postln;
-    // Small delay to ensure all OSC messages are processed
-    { ~tradFour.generate }.defer(0.1);
+    AppClock.sched(0.1, {
+        ~tradFour[\generate].value(~tradFour);
+        nil  // don't reschedule
+    });
 };
 
 "".postln;
@@ -97,7 +102,7 @@ var grammarPath = thisProcess.nowExecutingPath.dirname +/+ "grammars/LesterYoung
 ).postln;
 "  Waiting for chord data via OSC...".postln;
 "  Send: python -m python.leadsheet.osc_bridge <leadsheet>".postln;
-"  Replay:  ~tradFour.generate".postln;
-"  Stop:    ~tradFour.stop".postln;
+"  Replay:  ~tradFour[\\generate].value(~tradFour)".postln;
+"  Stop:    ~tradFour[\\stop].value(~tradFour)".postln;
 "========================================".postln;
 )

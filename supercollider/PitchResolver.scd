@@ -60,16 +60,21 @@
     // Resolve a single X-degree note
     // ---------------------------------------------------------------
     resolveX: { |self, degree, chord, targetMidi, minP, maxP|
-        var semitones, root, pc, midi;
-        semitones = self[\degreeToSemitones][degree];
-        if(semitones.isNil) {
-            // Unknown degree — try parsing as number
-            semitones = degree.asInteger % 12;
-        };
-        root = chord[\tonalKey];
-        if(root < 0) { root = chord[\chordTones][0] ? 0 };
-        pc = (root + semitones) % 12;
-        self.closestPitch([pc], targetMidi, minP, maxP)
+        var semitones, root, pc;
+        if(degree.isNil) {
+            // X note without explicit degree — treat as scale tone
+            self.closestPitch(chord[\scaleTones] ++ chord[\chordTones], targetMidi, minP, maxP)
+        } {
+            semitones = self[\degreeToSemitones][degree];
+            if(semitones.isNil) {
+                // Unknown degree — try parsing as number
+                semitones = degree.asInteger % 12;
+            };
+            root = chord[\tonalKey];
+            if(root < 0) { root = chord[\chordTones][0] ? 0 };
+            pc = (root + semitones) % 12;
+            self.closestPitch([pc], targetMidi, minP, maxP)
+        }
     },
 
     // ---------------------------------------------------------------

@@ -11,6 +11,9 @@
 //
 // Pitch class sets arrive as CSV strings ("0,4,7,11") and are parsed to Arrays.
 //
+// Uses OSCdef (named responders) so re-loading this file safely replaces
+// previous registrations without accumulating duplicate handlers.
+//
 // Usage:
 //   ~trad4Receiver.start;   // begin listening
 //   ~trad4Receiver.stop;    // stop listening
@@ -43,7 +46,8 @@
         ~trad4 = ();
 
         // /trad4/meta — tune metadata
-        self[\metaResp] = OSCFunc({ |msg|
+        // OSCdef replaces any previous responder with the same key
+        OSCdef(\trad4Meta, { |msg|
             ~trad4[\title]        = msg[1].asString;
             ~trad4[\composer]     = msg[2].asString;
             ~trad4[\tempo]        = msg[3].asFloat;
@@ -51,7 +55,7 @@
             ~trad4[\beatUnit]     = msg[5].asInteger;
             ~trad4[\totalBars]    = msg[6].asInteger;
             ~trad4[\inferredKey]  = msg[7].asString;
-            ~trad4[\chords]       = Array.new(256);
+            ~trad4[\chords]       = List.new(256);
 
             "TradFour: received meta — '%' by % (% bpm, %/%)".format(
                 ~trad4[\title], ~trad4[\composer],
@@ -60,7 +64,7 @@
         }, '/trad4/meta');
 
         // /trad4/chord — individual chord events
-        self[\chordResp] = OSCFunc({ |msg|
+        OSCdef(\trad4Chord, { |msg|
             var chord = (
                 index:      msg[1].asInteger,
                 bar:        msg[2].asInteger,
@@ -76,11 +80,11 @@
                 tonalMode:  msg[12].asString,
                 tonalScale: self.parseCSV(msg[13].asString)
             );
-            ~trad4[\chords] = ~trad4[\chords].add(chord);
+            ~trad4[\chords].add(chord);
         }, '/trad4/chord');
 
         // /trad4/done — completion signal
-        self[\doneResp] = OSCFunc({ |msg|
+        OSCdef(\trad4Done, { |msg|
             var count = msg[1].asInteger;
             "TradFour: received % chords for '%'".format(
                 count, ~trad4[\title]
@@ -100,12 +104,9 @@
     // Stop listening
     // ---------------------------------------------------------------
     stop: { |self|
-        [\metaResp, \chordResp, \doneResp].do { |key|
-            if(self[key].notNil) {
-                self[key].free;
-                self[key] = nil;
-            };
-        };
+        OSCdef(\trad4Meta).free;
+        OSCdef(\trad4Chord).free;
+        OSCdef(\trad4Done).free;
         "TradFour: OSC receiver stopped".postln;
         self
     }

@@ -40,15 +40,12 @@
     // ---------------------------------------------------------------
     init: { |self|
         MIDIClient.init;
-        self[\midiOut] = MIDIOut.newByName("SuperCollider", "out0");
-        if(self[\midiOut].isNil) {
-            // Fallback: use first available output
-            self[\midiOut] = MIDIOut(0);
-            "TradFourPlayer: using default MIDI output".postln;
-        } {
-            "TradFourPlayer: MIDI output → SuperCollider:out0".postln;
-        };
+        // Use MIDIOut(0) which creates a virtual output port.
+        // External apps (Reaper) connect to SC's MIDI output via JACK/ALSA.
+        self[\midiOut] = MIDIOut(0);
         self[\midiOut].latency = 0;
+        "TradFourPlayer: MIDI output initialized (port 0)".postln;
+        "TradFourPlayer: Connect Reaper's MIDI input to SuperCollider:out0 via JACK".postln;
         self
     },
 
@@ -78,6 +75,7 @@
                 if(midi.notNil and: { type != \R }) {
                     vel = self[\velocityMap][type] ? 75;
 
+                    "  note: % (%) vel=% dur=%".format(midi, type, vel, dur.round(0.01)).postln;
                     self[\midiOut].noteOn(self[\midiChan], midi, vel);
 
                     // Hold for note duration minus a small gap for articulation

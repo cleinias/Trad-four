@@ -1,5 +1,5 @@
 // GrammarExpander.scd — Trad-Four Phase 3
-// Recursive grammar expansion from start symbol P.
+// Grammar expansion from start symbol P.
 //
 // Two expansion paths:
 //   P → BRICK path: choose BRICK rule by duration, expand to note events
@@ -22,44 +22,62 @@
     // Main expansion entry point
     // ---------------------------------------------------------------
     expand: { |self, totalTicks|
-        var result;
-        result = Array.new(512);
-        self.expandP(totalTicks, result);
-        result
-    },
+        var result, remainingTicks, allPRules, clusterIndex;
 
-    // ---------------------------------------------------------------
-    // Expand P symbol: choose BRICK or START path
-    // ---------------------------------------------------------------
-    expandP: { |self, remainingTicks, result|
-        var allRules, eligible, chosen, ticks;
+        result = List.new(1024);
 
-        if(remainingTicks <= 0) {
-            // Base case: no more time
-        } {
-            // Combine brick and start P rules, filter by remaining duration
-            allRules = ~grammar[\pBrickRules] ++ ~grammar[\pStartRules];
-            eligible = allRules.select { |r| r[\ticks] <= remainingTicks };
+        // Pre-compute combined P rules (avoid ++ on every iteration)
+        allPRules = ~grammar[\pBrickRules] ++ ~grammar[\pStartRules];
+
+        // Pre-index cluster rules by lhs symbol for O(1) lookup
+        clusterIndex = IdentityDictionary.new;
+        ~grammar[\clusterRules].do { |r|
+            var key = r[\lhs].asSymbol;
+            if(clusterIndex[key].isNil) {
+                clusterIndex[key] = List.new(4);
+            };
+            clusterIndex[key].add(r);
+        };
+
+        // Iterative P expansion
+        remainingTicks = totalTicks;
+        while { remainingTicks > 0 } {
+            var eligible, chosen, ticks;
+
+            eligible = allPRules.select { |r| r[\ticks] <= remainingTicks };
 
             if(eligible.size == 0) {
                 // Fill remaining time with rest
-                var restBeats = remainingTicks / self[\ticksPerBeat];
-                result.add((type: \R, dur: restBeats));
+                result.add((type: \R, dur: remainingTicks / self[\ticksPerBeat]));
+                remainingTicks = 0;
             } {
-                chosen = ~grammarLoader.weightedChoose(eligible);
-                ticks = chosen[\ticks];
+                chosen = ~grammarLoader[\weightedChoose].value(~grammarLoader,eligible);
 
-                if(chosen[\sym] == "BRICK") {
-                    self.expandBrick(ticks, result);
+                if(chosen.isNil) {
+                    // Safety: all weights zero — fill with rest
+                    result.add((type: \R, dur: remainingTicks / self[\ticksPerBeat]));
+                    remainingTicks = 0;
                 } {
-                    // START path
-                    self.expandStart(chosen[\count], result);
-                };
+                    ticks = chosen[\ticks];
 
-                // Recurse for remaining time
-                self.expandP(remainingTicks - ticks, result);
+                    if(ticks <= 0) {
+                        // Safety: avoid infinite loop on zero-tick rules
+                        remainingTicks = 0;
+                    } {
+                        if(chosen[\sym] == "BRICK") {
+                            self.expandBrick(ticks, result);
+                        } {
+                            // START path
+                            self.expandStart(chosen[\count], result, clusterIndex);
+                        };
+
+                        remainingTicks = remainingTicks - ticks;
+                    };
+                };
             };
         };
+
+        result.asArray
     },
 
     // ---------------------------------------------------------------
@@ -71,62 +89,61 @@
         bucket = ~grammar[\brickRules][ticks];
         if(bucket.isNil) {
             // No rules for this duration — fill with rest
-            var restBeats = ticks / self[\ticksPerBeat];
-            result.add((type: \R, dur: restBeats));
+            result.add((type: \R, dur: ticks / self[\ticksPerBeat]));
         } {
             // Collect all rules across all brick types for this duration
-            allBrickRules = Array.new(64);
+            allBrickRules = List.new(64);
             bucket.keysValuesDo { |name, rules|
-                rules.do { |r| allBrickRules = allBrickRules.add(r) };
+                rules.do { |r| allBrickRules.add(r) };
             };
 
-            chosen = ~grammarLoader.weightedChoose(allBrickRules);
-            chosen[\notes].do { |note|
-                result.add(note);
+            if(allBrickRules.size == 0) {
+                result.add((type: \R, dur: ticks / self[\ticksPerBeat]));
+            } {
+                chosen = ~grammarLoader[\weightedChoose].value(~grammarLoader,allBrickRules);
+                if(chosen.notNil) {
+                    chosen[\notes].do { |note| result.add(note) };
+                };
             };
         };
     },
 
     // ---------------------------------------------------------------
-    // Expand START → Cluster Markov chain
+    // Expand START → Cluster Markov chain (iterative)
     // ---------------------------------------------------------------
-    expandStart: { |self, count, result|
-        var startRule, clusterName;
+    expandStart: { |self, count, result, clusterIndex|
+        var startRule, clusterName, step;
 
         // Choose initial cluster (Cluster0 or Cluster1)
-        startRule = ~grammarLoader.weightedChoose(~grammar[\startRules]);
-        clusterName = startRule[\rhs];
+        startRule = ~grammarLoader[\weightedChoose].value(~grammarLoader,~grammar[\startRules]);
 
-        // Run Markov chain for 'count' steps
-        self.expandCluster(clusterName, count, result);
-    },
+        if(startRule.notNil) {
+            clusterName = startRule[\rhs];
 
-    // ---------------------------------------------------------------
-    // Expand a Cluster state: emit Q terminal, transition to next
-    // ---------------------------------------------------------------
-    expandCluster: { |self, clusterName, stepsRemaining, result|
-        var eligible, chosen, terminal, nextCluster;
+            // Run Markov chain for 'count' steps
+            step = 0;
+            while { (step < count) and: { clusterName.notNil } } {
+                var eligible, chosen, terminal;
 
-        if(stepsRemaining <= 0) {
-            // Base case
-        } {
-            // Find cluster rules matching this cluster name
-            eligible = ~grammar[\clusterRules].select { |r|
-                r[\lhs] == clusterName
-            };
+                eligible = clusterIndex[clusterName.asSymbol];
 
-            if(eligible.size == 0) {
-                // Terminal cluster state (base case with no transitions)
-            } {
-                chosen = ~grammarLoader.weightedChoose(eligible);
-                terminal = chosen[\terminal].asSymbol;  // Q0 or Q1
-                nextCluster = chosen[\next];
+                if(eligible.isNil or: { eligible.size == 0 }) {
+                    // No transitions from this state — stop chain
+                    clusterName = nil;
+                } {
+                    chosen = ~grammarLoader[\weightedChoose].value(~grammarLoader,eligible);
+                    if(chosen.isNil) {
+                        clusterName = nil;
+                    } {
+                        terminal = chosen[\terminal].asSymbol;
 
-                // Expand the Q terminal
-                self.expandQ(terminal, result);
+                        // Expand the Q terminal
+                        self.expandQ(terminal, result);
 
-                // Transition to next cluster state
-                self.expandCluster(nextCluster, stepsRemaining - 1, result);
+                        clusterName = chosen[\next];
+                        step = step + 1;
+                    };
+                };
             };
         };
     },
@@ -138,12 +155,10 @@
         var rules, chosen;
 
         rules = ~grammar[\qRules][qName];
-        if(rules.isNil or: { rules.size == 0 }) {
-            // Unknown Q symbol — skip
-        } {
-            chosen = ~grammarLoader.weightedChoose(rules);
-            chosen[\notes].do { |note|
-                result.add(note);
+        if(rules.notNil and: { rules.size > 0 }) {
+            chosen = ~grammarLoader[\weightedChoose].value(~grammarLoader,rules);
+            if(chosen.notNil) {
+                chosen[\notes].do { |note| result.add(note) };
             };
         };
     }
