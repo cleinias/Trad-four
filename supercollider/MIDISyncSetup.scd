@@ -28,6 +28,10 @@
     // Initialize clock
     // ---------------------------------------------------------------
     init: { |self|
+        // MIDIClient must be initialized before MIDISyncClock can
+        // receive clock messages.  Calling init twice is harmless.
+        MIDIClient.init;
+
         if(self[\useMIDISync]) {
             // MIDISyncClock is a singleton from ddwMIDI
             self[\clock] = MIDISyncClock;

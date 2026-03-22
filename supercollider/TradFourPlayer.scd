@@ -41,7 +41,7 @@
     // Initialize MIDI output
     // ---------------------------------------------------------------
     init: { |self|
-        MIDIClient.init;
+        // MIDIClient.init is called by MIDISyncSetup — no need to repeat here.
         // Use MIDIOut(0) which creates a virtual output port.
         // External apps (Reaper) connect to SC's MIDI output via JACK/ALSA.
         self[\midiOut] = MIDIOut(0);
