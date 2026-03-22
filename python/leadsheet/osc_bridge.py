@@ -147,9 +147,10 @@ def prepare_and_broadcast(path: str, host: str = '127.0.0.1',
     """
     from python.leadsheet.parser import parse
     from python.leadsheet.annotator import annotate
-    from python.leadsheet.tonal_areas import run_roadmap
+    from python.leadsheet.tonal_areas import run_roadmap, majority_key
     from python.roadmap.brick_library import BrickLibrary
     from python.roadmap.cyk_parser import CYKParser
+    from python.roadmap.chord_block import pc_to_name
 
     ls = parse(path)
     annotate(ls)
@@ -162,7 +163,13 @@ def prepare_and_broadcast(path: str, host: str = '127.0.0.1',
         lib = BrickLibrary()
         lib.load(str(DICT_PATH), str(SUB_PATH))
     cyk = CYKParser(lib)
-    run_roadmap(ls, lib, cyk)
+    key_spans = run_roadmap(ls, lib, cyk)
+
+    # Override inferred_key with majority KeySpan (more accurate than
+    # music21's Krumhansl-Schmuckler, which confuses relative minor keys)
+    mk = majority_key(key_spans)
+    if mk:
+        ls.inferred_key = f"{pc_to_name(mk[0])} {mk[1]}"
 
     count = broadcast_leadsheet(ls, host, port)
     print(f"Broadcast {count} chords from '{ls.title}' to {host}:{port}")

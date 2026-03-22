@@ -29,6 +29,18 @@ from python.roadmap.post_processor import KeySpan
 
 
 # ---------------------------------------------------------------------------
+# majority_key — infer tune key from KeySpan durations
+# ---------------------------------------------------------------------------
+
+def majority_key(key_spans: list[KeySpan]) -> tuple[int, str] | None:
+    """Return (pitch_class, mode) of the KeySpan with longest total duration."""
+    if not key_spans:
+        return None
+    longest = max(key_spans, key=lambda ks: ks.duration)
+    return (longest.key, longest.mode)
+
+
+# ---------------------------------------------------------------------------
 # Scale computation
 # ---------------------------------------------------------------------------
 
